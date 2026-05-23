@@ -3,10 +3,11 @@ from typing import Optional, List
 from .ait import AITInstruction, AITCodec
 
 class EAPParser:
-    """The 'Assembly' layer. Parses >MEM:LOAD #ctx4 !8 style strings."""
+    """The 'Assembly' layer. Parses >MEM:LOAD #ctx4 !8 or >MEM:LOAD #ptr_0 !5 style strings."""
     
-    # Pattern: >DOMAIN:ACTION #ctxID !PRIORITY [| metadata]
-    PATTERN = r'>([A-Z]+):([A-Z]+)\s+#ctx([a-zA-Z0-9\._msg]+)\s*!(\d+)(?:\s*\|\s*(.*))?'
+    # Pattern: >DOMAIN:ACTION #ID !PRIORITY [| metadata]
+    # Modified to allow any ID after #, not just ctx prefixed ones
+    PATTERN = r'>([A-Z]+):([A-Z]+)\s+#([a-zA-Z0-9\._msg]+)\s*!(\d+)(?:\s*\|\s*(.*))?'
 
     DOMAIN_MAP = {
         'MEM': 'memory',
@@ -52,7 +53,7 @@ class EAPParser:
         if not match:
             return None
             
-        domain_raw, action_raw, ctx_id_suffix, priority_raw, metadata = match.groups()
+        domain_raw, action_raw, id_raw, priority_raw, metadata = match.groups()
         
         domain = cls.DOMAIN_MAP.get(domain_raw)
         action = cls.ACTION_MAP.get(action_raw)
@@ -60,8 +61,11 @@ class EAPParser:
         if not domain or not action:
             return None
         
-        # If ctx_id_suffix starts with 'msg_', it's a message ID, don't prefix with 'ctx'
-        target_id = ctx_id_suffix if ctx_id_suffix.startswith('msg_') else f"ctx{ctx_id_suffix}"
+        # Smart prefixing: If it doesn't look like a special ID (ptr_, msg_) 
+        # and doesn't already have 'ctx', add 'ctx' for convenience.
+        target_id = id_raw
+        if not (id_raw.startswith('msg_') or id_raw.startswith('ptr_') or id_raw.startswith('ctx')):
+            target_id = f"ctx{id_raw}"
             
         return AITInstruction(
             domain=domain,
@@ -70,4 +74,3 @@ class EAPParser:
             priority=int(priority_raw),
             metadata=metadata
         )
-
