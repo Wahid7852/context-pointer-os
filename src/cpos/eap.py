@@ -83,7 +83,13 @@ class EAPParser:
             target_id = id_raw
             if not (id_raw.startswith('msg_') or id_raw.startswith('ptr_') or 
                     id_raw.startswith('ptr://') or id_raw.startswith('ctx')):
-                target_id = f"ctx{id_raw}"            
+                # Check if it looks like a purely numeric ID (legacy support)
+                if id_raw.isdigit():
+                    target_id = f"ctx{id_raw}"
+                # Otherwise, assume it's a full ID as provided (v2.0)
+                else:
+                    target_id = id_raw
+            
         return AITInstruction(
             domain=domain,
             target_id=target_id,

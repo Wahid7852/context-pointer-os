@@ -1,6 +1,8 @@
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Any, Optional, List, Literal, Tuple
 from datetime import datetime
 from pydantic import BaseModel, Field
+
+from .semantic import SemanticEngine
 
 class ContextState(BaseModel):
     loaded: bool = False
@@ -67,6 +69,7 @@ class ContextRegistry:
         self.kernel_key: Optional[str] = None
         self.audit_log: List[Dict[str, Any]] = []
         self.node = None # [CPOS v0.4] Reference to NodeLink
+        self.semantic_engine = SemanticEngine() # [CPOS v2.0]
 
     def generate_kernel_key(self) -> str:
         import uuid
@@ -171,3 +174,8 @@ class ContextRegistry:
 
     def list_by_type(self, type_prefix: str) -> List[ContextObject]:
         return [obj for obj in self.registry.values() if obj.type.startswith(type_prefix)]
+
+    def semantic_search(self, query: str, limit: int = 3) -> List[Tuple[ContextObject, float]]:
+        """[CPOS v2.0] Searches pointers by meaning/relevance."""
+        all_objs = list(self.registry.values())
+        return self.semantic_engine.search(query, all_objs, limit=limit)

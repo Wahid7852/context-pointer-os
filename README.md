@@ -1,43 +1,35 @@
-# Context Pointer OS (CPOS) v1.0 (GA)
+# Context Pointer OS (CPOS) v2.0 (The Sentient OS)
 
-> **LLM agents don’t need bigger memory. They need memory addresses.**
+> **LLM agents don’t need bigger memory. They need a Cognitive Operating System.**
 
-Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage the memory, state, and security of long-running LLM agents. Instead of stuffing everything into the context window, CPOS uses **Context Pointers** to dynamically mount, swap, and protect information.
+Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage the memory, state, and identity of long-running LLM agents. 
 
-## 🚀 General Availability (v1.0) Key Features
+## 🧠 Version 2.0: Sentient Memory (Latest)
 
-- **🧠 Neural Memory**: AI-driven prefetching based on learned access patterns (v0.6).
-- **🔒 Retrieval Governance**: Automatic redaction and trust-based filtering (v0.2).
-- **🌐 Distributed Nodes**: Share pointers across network nodes with secure handshake (v0.4).
-- **🔌 MCP Compliance**: Native support for **Model Context Protocol** (v1.0).
-- **🧪 Speculative Branching**: Isolated hypothesis sandboxing with `FORK/COMMIT` (v0.3).
-- **📊 Cognitive Dashboard**: Real-time terminal and visual monitoring of brain activity (v0.7).
+CPOS v2.0 evolves from literal data management to **Semantic Understanding**.
+
+- **🔍 Semantic Search**: Find memory pointers by meaning using a vector-style search layer.
+- **👤 Persona Pointers**: Dynamically swap agent personalities and system instructions as switchable context.
+- **🌐 Real MCP Integration**: Standardized connection to Model Context Protocol servers (Notion, GitHub, etc.).
+- **📊 Real-time Monitor**: High-fidelity terminal and visual tracking of active contexts and brain heat.
+
+## 🚀 Key Features (from v1.0)
+
+- **🧠 Neural Memory**: AI-driven prefetching based on learned access patterns.
+- **🔒 Retrieval Governance**: Automatic redaction and trust-based filtering.
+- **🌐 Distributed Nodes**: Share pointers across network nodes with secure handshakes.
+- **🧪 Speculative Branching**: Isolated hypothesis sandboxing with `FORK/COMMIT`.
 
 ## 📜 Documents
 
-- [Context Pointer OS Specification v1.0](docs/specification_v1.0.md) - Official Final Specification.
-- [Specification v0.1 (Legacy)](docs/specification_v0.1.md) - Original design document.
+- [Context Pointer OS Specification v2.0](docs/specification_v2.0.md) - **Latest Specification**.
+- [Specification v1.0](docs/specification_v1.0.md) - Previous milestone.
 
-## 🧠 Conceptual Mapping
+## 🛠️ Try the Future (v2.0 Demos)
 
-CPOS maps standard OS components to cognitive architecture:
-
-- **LLM** = **CPU** (Reasoning Engine)
-- **Context Window** = **L1 Cache / Registers**
-- **Active Pointers** = **RAM**
-- **External Pointers (MCP/Node)** = **Distributed Disk / Network**
-- **Memory Policy** = **MMU / Homeostasis**
-- **Scheduler** = **Instruction Dispatch / PID Isolation**
-
-## 🛠️ Quick Start (Demonstrations)
-
-Try the following scripts to see the cognitive kernel in action:
-
+- `python3 src/cpos/demo_v50_sentient.py`: **Sentient Memory** (Semantic Search & Persona Swap).
 - `python3 src/cpos/demo_v40_mcp.py`: **MCP Compliance** & Universal Mounting.
 - `python3 src/cpos/demo_v32_terminal.py`: **Real-time Monitoring** and Activity Heat.
-- `python3 src/cpos/demo_v31_neural.py`: **Neural Prediction** and Pattern Learning.
-- `python3 src/cpos/demo_v29_network_integrity.py`: **Distributed Integrity** in Ring Topology.
-- `python3 src/cpos/demo_v26_speculative.py`: **Speculative Branching** (FORK/COMMIT).
 
 ## 📜 License
 

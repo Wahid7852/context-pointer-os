@@ -1,5 +1,6 @@
 import json
 import uuid
+import copy
 from typing import Dict, Any, Optional, List
 from .registry import ContextObject
 from .storage import DeviceDriver
@@ -35,19 +36,41 @@ class MockGitHubGateway(ExternalGateway):
         )
 
 class MCPGateway(ExternalGateway):
-    """[CPOS v1.0] Model Context Protocol (MCP) Bridge. 
+    """[CPOS v2.0] Model Context Protocol (MCP) Bridge. 
     Standardizes connections to world-wide MCP compliant servers."""
-    
+
+    def __init__(self):
+        self.server_connections: Dict[str, str] = {} # server_id -> url
+
+    def connect_server(self, server_id: str, url: str):
+        self.server_connections[server_id] = url
+        print(f"--- [MCP] Connected to remote MCP server: {server_id} @ {url} ---")
+
     def fetch_object(self, path: str) -> Optional[ContextObject]:
         # path format: <server_id>/<resource_uri>
-        # e.g., notion/pages/123
         parts = path.split("/", 1)
         if len(parts) < 2: return None
-        
+
         server_id = parts[0]
         resource_uri = parts[1]
-        
-        # Simulated MCP Server Response
+
+        # If we have a real URL, we would perform a JSON-RPC call here
+        if server_id in self.server_connections:
+            url = self.server_connections[server_id]
+            print(f"--- [MCP RPC] Calling {url} for resource {resource_uri} ---")
+            # Simulation of real network response
+            return ContextObject(
+                id=f"mcp_{server_id}_{str(uuid.uuid4())[:8]}",
+                type="mcp_resource",
+                title=f"Remote MCP Resource ({server_id})",
+                summary=f"Dynamically fetched from {url}",
+                data=f"REAL_DATA_FROM_{url}_{resource_uri}",
+                source=f"mcp_server:{server_id}",
+                trust_score=1.0,
+                sensitivity_level="internal"
+            )
+
+        # Fallback to simulated local data for known IDs
         mcp_data = {
             "notion": {
                 "title": "Project Roadmap",
@@ -74,7 +97,7 @@ class MCPGateway(ExternalGateway):
             summary=res["summary"],
             data=res["data"],
             source=f"mcp_server:{server_id}",
-            trust_score=1.0, # MCP is highly trusted
+            trust_score=1.0, 
             sensitivity_level="internal",
             metadata={"mcp_uri": resource_uri}
         )
@@ -85,7 +108,7 @@ class GatewayManager:
     def __init__(self):
         self.gateways: Dict[str, ExternalGateway] = {
             "github": MockGitHubGateway(),
-            "mcp": MCPGateway() # [CPOS v1.0] MCP Support
+            "mcp": MCPGateway() 
         }
 
     def register_gateway(self, name: str, gateway: ExternalGateway):

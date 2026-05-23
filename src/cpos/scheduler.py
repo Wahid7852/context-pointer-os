@@ -118,6 +118,8 @@ class Scheduler:
         # [CPOS v0.6] Neural Prediction: History and Transition Matrix
         self.cognitive_history: List[str] = [] # Last loaded context IDs
         self.transition_matrix: Dict[str, Dict[str, int]] = {} # id -> {next_id: frequency}
+        # [CPOS v2.0] Persona Management
+        self.current_persona: Optional[str] = None
         # Initialize Journal Integrity with Kernel Key as secret (v1.9)
         self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
 
@@ -189,6 +191,9 @@ class Scheduler:
                 self.registry._log_event("context_retrieval", obj.id, {"agent": self.current_agent, "role": str(role)})
 
         final_output = "\n\n".join(output)
+        if self.current_persona:
+            final_output = f"--- ACTIVE PERSONA: {self.current_persona} ---\n\n" + final_output
+            
         if conflicts:
             final_output = "--- SYSTEM CONTEXT WARNINGS ---\n" + "\n".join(conflicts) + "\n\n" + final_output
             
@@ -347,8 +352,23 @@ class Scheduler:
         if status == "ok":
             if instr.action == "load":
                 if not self.store.load(instr.target_id, effective_priority): status = "error"; result = "ERR_LOAD_FAILED"
-                elif self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
-            elif instr.action == "unload": self.store.unload(instr.target_id)
+                else:
+                    if self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
+                    # [CPOS v2.0] Persona Swap: If domain is PER, update current persona
+                    if instr.domain == "persona":
+                        self.current_persona = instr.target_id
+                        result = f"Persona swapped to {instr.target_id}"
+            elif instr.action == "unload": 
+                self.store.unload(instr.target_id)
+                if self.current_persona == instr.target_id: self.current_persona = None
+            elif instr.action == "query":
+                # [CPOS v2.0] Semantic Search
+                q = re.search(r'q="([^"]+)"', instr.metadata or "")
+                if q:
+                    query_text = q.group(1)
+                    matches = self.registry.semantic_search(query_text, limit=3)
+                    result = [f"{m[0].id} (Score: {m[1]:.2f})" for m in matches]
+                else: status = "error"; result = "ERR_INVALID_QUERY"
             elif instr.action == "write":
                 if obj:
                     if '=' in (instr.metadata or ""): obj.data = instr.metadata.split('=',1)[1]
@@ -385,8 +405,19 @@ class Scheduler:
                 if obj and obj.parent: self.store.unload(obj.id); obj.status = "deleted"; result = "Rolled back"
             elif instr.action == "connect":
                 addr = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or ""); key = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or "")
-                if addr and key and self.store.node and self.store.node.handshake(addr.group(1), key.group(1)): result = "Handshake OK"
-                else: status = "error"; result = "ERR_HANDSHAKE_FAILED"
+                mcp = re.search(r'mcp=([a-zA-Z0-9_-]+)', instr.metadata or ""); url = re.search(r'url=([^ ]+)', instr.metadata or "")
+                
+                if addr and key and self.store.node and self.store.node.handshake(addr.group(1), key.group(1)): 
+                    result = "Handshake OK"
+                elif mcp and url and self.store.gateways:
+                    mcp_id = mcp.group(1); mcp_url = url.group(1)
+                    # Get the mcp gateway
+                    mcp_gw = self.store.gateways.gateways.get("mcp")
+                    if mcp_gw:
+                        mcp_gw.connect_server(mcp_id, mcp_url)
+                        result = f"MCP Server '{mcp_id}' registered at {mcp_url}"
+                    else: status = "error"; result = "ERR_MCP_GW_NOT_FOUND"
+                else: status = "error"; result = "ERR_HANDSHAKE_OR_MCP_FAILED"
             elif instr.action == "policy":
                 if self.acl.get_role(self.current_agent) == Role.ROOT:
                     t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or "")
