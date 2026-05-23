@@ -286,19 +286,6 @@ class Scheduler:
                 result = f"Action Gated. Approval Required: {req_id} (Reason: {reason})"
                 self._log_audit(instr, status, result, effective_priority)
                 return {"status": status, "result": result, "request_id": req_id}
-            else:
-                print(f"--- [KERNEL] Auto-approving sanitized action (System Stable) ---")
-
-        # 0.2 Immutable Role Recovery (v1.8)
-        if instr.action == "syscall" and "func=set_role" in (instr.metadata or ""):
-            match = re.search(r'agent=([a-zA-Z0-9_-]+)', instr.metadata)
-            if match:
-                target_agent = match.group(1)
-                if self.acl.is_immutable(target_agent) and self.current_agent != "root":
-                    print(f"--- [SECURITY ALERT] Attempt to hijack immutable agent '{target_agent}' blocked! ---")
-                    status = "error"; result = "ERR_IMMUTABLE_AGENT_PROTECTION"
-                    self._log_audit(instr, status, result, effective_priority)
-                    return {"status": status, "result": result}
 
         # Guards
         if obj:
@@ -308,7 +295,7 @@ class Scheduler:
                 status = "error"; result = f"ERR_CONTEXT_LOCKED_BY_PID_{obj.locked_by}"
             elif not self.acl.check(self.current_agent, instr.target_id, obj.type):
                 status = "error"; result = "ERR_PERMISSION_DENIED"
-        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy"]:
+        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
 
         if status == "ok":
@@ -317,7 +304,44 @@ class Scheduler:
                     status = "error"
                     result = "ERR_LOAD_FAILED_CHECK_STATUS"
             elif instr.action == "unload": self.store.unload(instr.target_id)
-            elif instr.action == "summarize": result = f"{instr.target_id}:sum"; obj.access_heat = max(0, obj.access_heat - 3.0)
+            elif instr.action == "summarize": result = obj.summary if obj else "ERR"
+            elif instr.action == "raw": result = obj.data if obj else "ERR"
+            elif instr.action == "write":
+                d_match = re.search(r'data=(.*)', instr.metadata or "")
+                if d_match and obj: obj.data = d_match.group(1); obj.state.dirty = True; result = "Updated"
+                else: status = "error"; result = "ERR_WRITE_FAILED"
+            elif instr.action == "lock":
+                if obj: obj.locked_by = self.current_pid; result = f"Locked by PID {self.current_pid}"
+            elif instr.action == "unlock":
+                if obj and (obj.locked_by == self.current_pid or self.current_pid == 0): obj.locked_by = None; result = "Unlocked"
+                else: status = "error"; result = "ERR_UNLOCK_DENIED"
+            elif instr.action == "trust":
+                score_match = re.search(r'score=([0-9\.]+)', instr.metadata or "")
+                reason_match = re.search(r'reason="([^"]+)"', instr.metadata or "")
+                if score_match and reason_match:
+                    score = float(score_match.group(1))
+                    reason = reason_match.group(1)
+                    if self.registry.update_trust(instr.target_id, score, reason):
+                        result = f"Trust updated to {score}"
+                    else: status = "error"; result = "ERR_TRUST_UPDATE_FAILED"
+                else: status = "error"; result = "ERR_INVALID_METADATA"
+            elif instr.action == "invalidate":
+                reason_match = re.search(r'reason="([^"]+)"', instr.metadata or "")
+                repl_match = re.search(r'replacement=([a-zA-Z0-9_]+)', instr.metadata or "")
+                if reason_match:
+                    reason = reason_match.group(1)
+                    repl = repl_match.group(1) if repl_match else None
+                    if self.registry.invalidate(instr.target_id, reason, replacement=repl):
+                        result = f"Invalidated (Reason: {reason})"
+                        self.store.unload(instr.target_id)
+                    else: status = "error"; result = "ERR_INVALIDATION_FAILED"
+                else: status = "error"; result = "ERR_INVALID_METADATA"
+            elif instr.action == "ls": result = "\n".join([f"{o.id} [{o.type}]" for o in self.registry.registry.values() if self.acl.check(self.current_agent, o.id, o.type)])
+            elif instr.action == "ps": result = f"Active Agent: {self.current_agent} (PID: {self.current_pid})"
+            elif instr.action == "syscall":
+                f = re.search(r'func=([a-z_]+)', instr.metadata or "")
+                if f and f.group(1) == "listdir" and self.acl.get_role(self.current_agent) == Role.ROOT: result = str(os.listdir('.')[:5])
+                else: status = "error"; result = "ERR_SYSCALL_DENIED"
             elif instr.action == "send":
                 to_match = re.search(r'to=([a-zA-Z0-9_-]+)', instr.metadata or ""); body_match = re.search(r'body="([^"]+)"', instr.metadata or "")
                 if to_match and body_match:
@@ -404,73 +428,26 @@ class Scheduler:
                 p = self.registry.get(obj.parent) if obj and obj.parent else None
                 if p: p.data = obj.data; p.state.dirty = True; result = "Merged"; self.store.unload(obj.id)
                 else: status = "error"; result = "ERR_MERGE_FAILED"
-            elif instr.action == "write":
-                if obj:
-                    if obj.type == "neurostate":
-                        try: u = json.loads(instr.metadata); d = json.loads(obj.data) if obj.data else {}
-                        except: u = {p.split('=')[0]: p.split('=')[1] for p in (instr.metadata or "").split() if '=' in p}; d = json.loads(obj.data) if obj.data else {}
-                        d.update(u); obj.data = json.dumps(d); result = "Updated"
-                    else:
-                        if '=' in (instr.metadata or ""): obj.data = instr.metadata.split('=',1)[1]
-                        else: obj.data = instr.metadata
-                        result = "Updated"
-                    obj.state.dirty = True; obj.updated_at = datetime.now()
-            elif instr.action == "lock":
-                if obj: obj.locked_by = self.current_pid; result = "Locked"
-            elif instr.action == "unlock":
-                if obj and (obj.locked_by == self.current_pid or self.current_pid == 0): obj.locked_by = None; result = "Unlocked"
-                else: status = "error"; result = "ERR_UNLOCK_DENIED"
-            elif instr.action == "trust":
-                score_match = re.search(r'score=([0-9\.]+)', instr.metadata or "")
-                reason_match = re.search(r'reason="([^"]+)"', instr.metadata or "")
-                if score_match and reason_match:
-                    score = float(score_match.group(1))
-                    reason = reason_match.group(1)
-                    if self.registry.update_trust(instr.target_id, score, reason):
-                        result = f"Trust updated to {score}"
-                    else: status = "error"; result = "ERR_TRUST_UPDATE_FAILED"
-                else: status = "error"; result = "ERR_INVALID_METADATA"
-            elif instr.action == "invalidate":
-                reason_match = re.search(r'reason="([^"]+)"', instr.metadata or "")
-                repl_match = re.search(r'replacement=([a-zA-Z0-9_]+)', instr.metadata or "")
-                if reason_match:
-                    reason = reason_match.group(1)
-                    repl = repl_match.group(1) if repl_match else None
-                    if self.registry.invalidate(instr.target_id, reason, replacement=repl):
-                        result = f"Invalidated (Reason: {reason})"
-                        self.store.unload(instr.target_id)
-                    else: status = "error"; result = "ERR_INVALIDATION_FAILED"
-                else: status = "error"; result = "ERR_INVALID_METADATA"
-            elif instr.action == "ls": result = "\n".join([f"{o.id} [{o.type}]" for o in self.registry.registry.values() if self.acl.check(self.current_agent, o.id, o.type)])
-            elif instr.action == "ps": result = "\n".join([f"{o.id} [{o.type}]" for o in self.store.active_contexts.values() if self.acl.check(self.current_agent, o.id, o.type)])
-            elif instr.action == "syscall":
-                f = re.search(r'func=([a-z_]+)', instr.metadata or "")
-                if f and f.group(1) == "listdir" and self.acl.get_role(self.current_agent) == Role.ROOT: result = str(os.listdir('.')[:5])
-                elif f and f.group(1) == "shm_alloc" and self.acl.get_role(self.current_agent) == Role.ROOT:
-                    shm_id = f"ctxS{len(self.registry.registry)}"; self.registry.register(ContextObject(id=shm_id, type="shared", title="SHM", content_ref="", summary="Shared", tokens_estimate=1000)); result = f"Allocated SHM: {shm_id}"
-                elif f and f.group(1) == "grep" and self.acl.get_role(self.current_agent) == Role.ROOT:
-                    q = re.search(r'q="([^"]+)"', instr.metadata or "")
-                    if q:
-                        query = q.group(1).lower(); matches = []
-                        for o in self.registry.registry.values():
-                            c = str(o.data) if o.data and "[PAGED TO DISK]" not in str(o.data) else ""
-                            if not c and o.state.paged and o.swap_ref: c = self.store.storage.read(o.swap_ref) or ""
-                            if query in c.lower(): matches.append(f"MEM:{o.id}")
-                        for entry in self.audit_log:
-                            if query in str(entry).lower(): matches.append(f"LOG:{entry['action']}")
-                        result = f"Grep matches: {matches[:10]}"
-                    else: status = "error"; result = "ERR_INVALID_QUERY"
-                elif f and f.group(1) == "snapshot" and self.acl.get_role(self.current_agent) == Role.ROOT:
-                    snapshot_data = {"registry": [o.dict() for o in self.registry.registry.values()], "acl": {"roles": {k: int(v) for k, v in self.acl.agent_roles.items()}}, "time": datetime.now().isoformat()}
-                    path = os.path.join(self.store.storage.base_dir, "system_image.json")
-                    with open(path, "w") as file: json.dump(snapshot_data, file)
-                    result = f"Snapshot saved to {path}"
-                else: status = "error"; result = "DENIED"
+            elif instr.action == "gc": self.policy.enforce(); result = "Memory GCed"
             elif instr.action == "device":
                 m = re.search(r'mount=([a-z]+)', instr.metadata or ""); p = re.search(r'path=([^ ]*)', instr.metadata or "")
                 if m and self.store.storage:
                     prefix = m.group(1); path = p.group(1) if p else ""; self.store.storage.mount(prefix, path); result = f"Mounted {m.group(1)}"
                 else: status = "error"; result = "FAILED"
+            elif instr.action == "connect":
+                if self.acl.get_role(self.current_agent) != Role.ROOT:
+                    status = "error"; result = "ERR_PERMISSION_DENIED"
+                else:
+                    addr_match = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or "")
+                    key_match = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or "")
+                    if addr_match and key_match:
+                        addr = addr_match.group(1); key = key_match.group(1)
+                        if self.store.node and self.store.node.handshake(addr, key):
+                            result = f"Handshake successful with {addr}"
+                        else: 
+                            status = "error"; result = "ERR_HANDSHAKE_FAILED"
+                    else: 
+                        status = "error"; result = "ERR_INVALID_METADATA"
             elif instr.action == "policy":
                 if self.acl.get_role(self.current_agent) != Role.ROOT:
                     status = "error"; result = "ERR_PERMISSION_DENIED"

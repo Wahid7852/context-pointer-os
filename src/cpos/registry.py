@@ -66,6 +66,7 @@ class ContextRegistry:
         self.registry: Dict[str, ContextObject] = {}
         self.kernel_key: Optional[str] = None
         self.audit_log: List[Dict[str, Any]] = []
+        self.node = None # [CPOS v0.4] Reference to NodeLink
 
     def generate_kernel_key(self) -> str:
         import uuid
@@ -87,9 +88,9 @@ class ContextRegistry:
             obj.updated_at = datetime.now()
         return obj
 
-    def invalidate(self, ctx_id: str, reason: str, replacement: Optional[str] = None) -> bool:
+    def invalidate(self, ctx_id: str, reason: str, replacement: Optional[str] = None, skip_broadcast_addr: Optional[str] = None) -> bool:
         obj = self.registry.get(ctx_id)
-        if not obj:
+        if not obj or obj.status == "invalidated":
             return False
         
         obj.status = "invalidated"
@@ -99,6 +100,11 @@ class ContextRegistry:
         obj.updated_at = datetime.now()
         
         self._log_event("context_invalidation", ctx_id, {"reason": reason})
+        
+        # [CPOS v0.4] Broadcast invalidation to network
+        if self.node:
+            self.node.broadcast_invalidation(ctx_id, reason, skip_addr=skip_broadcast_addr)
+            
         return True
 
     def update_trust(self, ctx_id: str, score: float, reason: str) -> bool:

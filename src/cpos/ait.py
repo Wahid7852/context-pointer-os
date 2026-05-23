@@ -38,6 +38,7 @@ class AITCodec:
         's': 'sync',
         'p': 'send',
         'c': 'gc',
+        'h': 'connect',
         'i': 'ls',
         'x': 'ps',
         'y': 'syscall',

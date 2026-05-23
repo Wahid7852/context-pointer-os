@@ -8,8 +8,35 @@ class ContextStore:
         self.registry = registry
         self.storage = storage
         self.active_contexts: Dict[str, ContextObject] = {}
+        self.node = None # [CPOS v0.4] Reference to NodeLink
 
     def load(self, ctx_id: str, priority: int = 5, _seen: Optional[set] = None) -> bool:
+        # [CPOS v0.4] Handle Distributed Pointer URI
+        if ctx_id.startswith("ptr://") and self.node:
+            try:
+                parts = ctx_id[6:].split("/")
+                remote_addr, ctx_type, remote_id = parts
+                
+                # Check if we already have it in registry (cached metadata)
+                if not self.registry.get(remote_id):
+                    # Fetch from remote node
+                    remote_obj = self.node.fetch_remote_context(remote_addr, ctx_type, remote_id)
+                    if remote_obj:
+                        # Register locally (metadata and data)
+                        if remote_obj.data:
+                            remote_obj.state.loaded = True
+                        self.registry.register(remote_obj)
+                        print(f"--- [STORE] Remote pointer {ctx_id} registered locally ---")
+                    else:
+                        print(f"--- [STORE ERROR] Failed to fetch remote context {ctx_id} ---")
+                        return False
+                
+                # Now that it's in registry, load it normally using the remote_id
+                ctx_id = remote_id 
+            except Exception as e:
+                print(f"--- [STORE ERROR] Distributed load failed: {str(e)} ---")
+                return False
+
         obj = self.registry.get(ctx_id)
         if not obj:
             return False

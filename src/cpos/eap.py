@@ -6,8 +6,8 @@ class EAPParser:
     """The 'Assembly' layer. Parses >MEM:LOAD #ctx4 !8 or >MEM:LOAD #ptr_0 !5 style strings."""
     
     # Pattern: >DOMAIN:ACTION #ID !PRIORITY [| metadata]
-    # Modified to allow any ID after #, not just ctx prefixed ones
-    PATTERN = r'>([A-Z]+):([A-Z]+)\s+#([a-zA-Z0-9\._msg]+)\s*!(\d+)(?:\s*\|\s*(.*))?'
+    # Modified to allow distributed pointer URI characters (:, /, -, .)
+    PATTERN = r'>([A-Z]+):([A-Z]+)\s+#([a-zA-Z0-9\._msg:/\-\.]+)\s*!(\d+)(?:\s*\|\s*(.*))?'
 
     DOMAIN_MAP = {
         'MEM': 'memory',
@@ -42,6 +42,7 @@ class EAPParser:
         'PS': 'ps',
         'SYS': 'syscall',
         'DEV': 'device',
+        'CONNECT': 'connect',
         'POLICY': 'policy',
         'LOCK': 'lock',
         'UNLOCK': 'unlock'
@@ -61,12 +62,27 @@ class EAPParser:
         if not domain or not action:
             return None
         
-        # Smart prefixing: If it doesn't look like a special ID (ptr_, msg_) 
-        # and doesn't already have 'ctx', add 'ctx' for convenience.
-        target_id = id_raw
-        if not (id_raw.startswith('msg_') or id_raw.startswith('ptr_') or id_raw.startswith('ctx')):
-            target_id = f"ctx{id_raw}"
-            
+        # [CPOS v0.4] Distributed Pointer Parsing
+        # Format: ptr://node_addr/type/id
+        if id_raw.startswith("ptr://"):
+            try:
+                # Remove ptr:// and split
+                parts = id_raw[6:].split("/")
+                if len(parts) == 3:
+                    node_addr, ctx_type, remote_id = parts
+                    # We store the full remote path as target_id for the scheduler/store to handle
+                    target_id = id_raw
+                else:
+                    target_id = id_raw # Fallback
+            except:
+                target_id = id_raw
+        else:
+            # Smart prefixing: If it doesn't look like a special ID (ptr_, msg_, ptr://) 
+            # and doesn't already have 'ctx', add 'ctx' for convenience.
+            target_id = id_raw
+            if not (id_raw.startswith('msg_') or id_raw.startswith('ptr_') or 
+                    id_raw.startswith('ptr://') or id_raw.startswith('ctx')):
+                target_id = f"ctx{id_raw}"            
         return AITInstruction(
             domain=domain,
             target_id=target_id,
