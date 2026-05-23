@@ -24,6 +24,15 @@ def render_dashboard(registry: ContextRegistry, store: ContextStore, audit_log: 
             .status-stale {{ background: #d29922; color: black; }}
             .status-invalidated {{ background: #da3633; color: white; }}
             .status-hyp {{ background: #8957e5; color: white; }}
+            
+            /* Activity Pulse (v0.7) */
+            @keyframes pulse {{
+                0% {{ box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); }}
+                70% {{ box-shadow: 0 0 0 10px rgba(0, 212, 255, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); }}
+            }}
+            .hot-context {{ border-left: 4px solid #00d4ff; background: rgba(0, 212, 255, 0.05); animation: pulse 2s infinite; }}
+            
             .status-loaded {{ color: #00d4ff; font-weight: bold; }}
             .status-disk {{ color: #8b949e; }}
             
@@ -132,8 +141,9 @@ def render_dashboard(registry: ContextRegistry, store: ContextStore, audit_log: 
     ram_rows = ""
     for obj in store.active_contexts.values():
         data_preview = str(obj.data)[:80] + "..." if obj.data else "None"
+        row_class = "hot-context" if obj.access_heat > 2.0 else ""
         ram_rows += f"""
-        <tr>
+        <tr class='{row_class}'>
             <td><code>#{obj.id}</code></td>
             <td><strong>{obj.title}</strong><br><small>{obj.summary}</small></td>
             <td class='audit-result'>{data_preview}</td>
@@ -164,3 +174,41 @@ def render_dashboard(registry: ContextRegistry, store: ContextStore, audit_log: 
     with open(output_path, "w") as f:
         f.write(full_html)
     print(f"[DASHBOARD] Rendered to {output_path}")
+
+def print_terminal_monitor(kernel):
+    """[CPOS v0.7] Renders a high-fidelity cognitive monitor in the terminal."""
+    # ANSI Colors
+    CYAN = "\033[96m"; GREEN = "\033[92m"; YELLOW = "\033[93m"; RED = "\033[91m"; PURPLE = "\033[95m"; RESET = "\033[0m"; BOLD = "\033[1m"
+    
+    print(f"\n{BOLD}{CYAN}>>> CPOS COGNITIVE MONITOR [NODE: {kernel.node.full_address}] <<<{RESET}")
+    print(f"{'-'*60}")
+    
+    # 1. RAM State
+    print(f"{BOLD}[ACTIVE CONTEXTS (RAM)]{RESET}")
+    if not kernel.store.active_contexts:
+        print(" (empty)")
+    for ctx_id, obj in kernel.store.active_contexts.items():
+        heat_bar = "!" * int(min(10, obj.access_heat * 2))
+        heat_color = RED if obj.access_heat > 3.0 else YELLOW if obj.access_heat > 1.0 else RESET
+        status_color = PURPLE if obj.metadata.get("is_hypothesis") else GREEN
+        print(f" #{ctx_id:<12} | {status_color}{obj.status.upper():<10}{RESET} | Heat: {heat_color}{heat_bar:<10}{RESET} | {obj.title}")
+
+    # 2. Neural Predictions
+    print(f"\n{BOLD}[NEURAL PREDICTION ENGINE]{RESET}")
+    history = " -> ".join(kernel.scheduler.cognitive_history[-5:])
+    print(f" History: {history}")
+    
+    if kernel.scheduler.cognitive_history:
+        last_id = kernel.scheduler.cognitive_history[-1]
+        preds = kernel.scheduler.transition_matrix.get(last_id, {})
+        if preds:
+            top_pred = sorted(preds.items(), key=lambda x: x[1], reverse=True)[0]
+            print(f" Next Prediction: {CYAN}{top_pred[0]}{RESET} (Confidence: {top_pred[1]})")
+        else:
+            print(" Next Prediction: (learning...)")
+    
+    # 3. System Metrics
+    mode = kernel.scheduler.retrieval_policy.mode.value.upper()
+    print(f"\n{BOLD}Mode: {GREEN}{mode}{RESET} | Ticks: {kernel.scheduler.tick_count} | Trust Min: {kernel.scheduler.retrieval_policy.minimum_trust_score}")
+    print(f"{'-'*60}\n")
+

@@ -115,6 +115,9 @@ class Scheduler:
         self.approvals = ApprovalStore()
         self.approval_policy = ApprovalPolicy()
         self.retrieval_policy = RetrievalPolicy() # CPOS v0.1 Governance
+        # [CPOS v0.6] Neural Prediction: History and Transition Matrix
+        self.cognitive_history: List[str] = [] # Last loaded context IDs
+        self.transition_matrix: Dict[str, Dict[str, int]] = {} # id -> {next_id: frequency}
         # Initialize Journal Integrity with Kernel Key as secret (v1.9)
         self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
 
@@ -275,24 +278,33 @@ class Scheduler:
                     self.registry._log_event("auto_validation", obj.id, {"status": "restored"})
 
     def _prefetch(self, target_id: str):
-        """[CPOS v0.5] Predictive context prefetching."""
+        """[CPOS +v0.6] Enhanced Neural prefetching."""
         target = self.registry.get(target_id)
         if not target: return
         
         prefetch_candidates = []
-        # 1. Branch/Child prefetch
-        if target.branches: prefetch_candidates.extend(target.branches[:2])
-            
-        # 2. Type-based sibling prefetch (Spec -> Code)
+        
+        # 1. Neural Prediction (v0.6): Predict based on history
+        if self.cognitive_history:
+            last_id = self.cognitive_history[-1]
+            if last_id in self.transition_matrix:
+                # Find the most frequent successors
+                predictions = self.transition_matrix[last_id]
+                sorted_preds = sorted(predictions.items(), key=lambda x: x[1], reverse=True)
+                for pred_id, freq in sorted_preds[:2]: # Top 2 predicted
+                    if freq >= 2: # Only if pattern has occurred at least twice
+                        prefetch_candidates.append(pred_id)
+                        print(f"--- [NEURAL] Predicted next load: {pred_id} (pattern frequency: {freq}) ---")
+
+        # 2. Heuristic Prefetch (v0.5)
+        if target.branches: prefetch_candidates.extend(target.branches[:1])
         if target.type == "spec":
-            # Heuristic: Find code pointers that share the same base name
             base_name = target_id.replace("ctx_spec_", "").replace("spec_", "").replace("ctx_", "")
             for obj in self.registry.registry.values():
-                if obj.type == "code" and base_name in obj.id.lower():
-                    prefetch_candidates.append(obj.id)
+                if obj.type == "code" and base_name in obj.id.lower(): prefetch_candidates.append(obj.id)
                     
         for cid in prefetch_candidates:
-            if cid not in self.store.active_contexts:
+            if cid not in self.store.active_contexts and cid != target_id:
                 print(f"--- [PREDICTIVE] Prefetching candidate: {cid} ---")
                 self.store.load(cid, priority=1)
 
@@ -300,6 +312,16 @@ class Scheduler:
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
         
+        # [CPOS v0.6] Track cognitive history for neural prediction
+        if instr.action == "load":
+            if self.cognitive_history:
+                prev = self.cognitive_history[-1]
+                if prev != instr.target_id:
+                    if prev not in self.transition_matrix: self.transition_matrix[prev] = {}
+                    self.transition_matrix[prev][instr.target_id] = self.transition_matrix[prev].get(instr.target_id, 0) + 1
+            self.cognitive_history.append(instr.target_id)
+            if len(self.cognitive_history) > 20: self.cognitive_history.pop(0)
+
         # 0. Cognitive Firewall, Approval, Guards...
         # [Simplified for visibility, keeping previous logic intact]
         sanitized_metadata, violations = PayloadSanitizer.sanitize(instr.action, instr.metadata)
@@ -316,6 +338,8 @@ class Scheduler:
                 return {"status": status, "result": result, "request_id": req_id}
 
         if obj:
+            # [CPOS v0.7] Real-time Heat Tracking: Increase heat upon access
+            obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
         elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"

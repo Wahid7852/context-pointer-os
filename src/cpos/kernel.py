@@ -36,22 +36,23 @@ class CPOS:
         """Executes a single instruction and runs homeostasis (GC/Paging)."""
         self.scheduler.set_agent(agent, pid=pid)
         res = self.scheduler.dispatch(instruction)
-        
-        # Homeostasis: Run memory policy and background checks
-        self.policy.enforce()
-        
         return res
 
-    def save_report(self, path: str = "cpos_dashboard.html"):
-        render_dashboard(self.registry, self.store, self.scheduler.audit_log, path)
+    def monitor(self):
+        """[CPOS v0.7] Triggers the real-time cognitive terminal."""
+        from .dashboard import print_terminal_monitor
+        print_terminal_monitor(self)
+
+    def save_report(self, output_path: str = "cpos_dashboard.html"):
+        """The 'Screen Driver'. Generates the visual system report."""
+        render_dashboard(self.registry, self.store, self.scheduler.audit_log, output_path)
 
     def restore(self, snapshot_path: str):
-        """Reboots the system from a disk image."""
+        """Restores kernel state from a JSON system image."""
         import json
         with open(snapshot_path, "r") as f:
             data = json.load(f)
             # Restore Registry
-            self.registry.registry = {}
             for item in data["registry"]:
                 obj = ContextObject(**item)
                 self.registry.register(obj)
