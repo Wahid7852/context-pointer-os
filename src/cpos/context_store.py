@@ -23,7 +23,9 @@ class ContextStore:
                 print(f"Swap-In: {ctx_id} restored from .swap")
 
         # 2. Standard Load from storage
-        if not obj.state.loaded and self.storage:
+        # v2.0: For device types, we always reload to get fresh I/O results
+        is_device = obj.type == "device" or "://" in obj.content_ref
+        if (not obj.state.loaded or is_device) and self.storage:
             content = self.storage.read(obj.content_ref)
             if content:
                 obj.data = content

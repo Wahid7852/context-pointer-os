@@ -2,6 +2,8 @@ import json
 import re
 import time
 import os
+import hashlib
+import hmac
 from datetime import datetime
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
@@ -10,6 +12,36 @@ from .eap import EAPParser
 from .context_store import ContextStore
 from .registry import ContextObject
 from .acl import AccessControlList, Role
+
+class JournalIntegrity:
+    """The 'Black Box' layer. Chained HMAC signatures for tamper-evidence."""
+    def __init__(self, secret_key: str):
+        self.secret_key = secret_key.encode()
+        self.last_hash = "0" * 64
+
+    def sign(self, entry: dict) -> str:
+        # Create a canonical string representation
+        content = json.dumps(entry, sort_keys=True)
+        # Chain with previous hash
+        chain_input = f"{self.last_hash}|{content}".encode()
+        current_hash = hmac.new(self.secret_key, chain_input, hashlib.sha256).hexdigest()
+        self.last_hash = current_hash
+        return current_hash
+
+    def verify_chain(self, journal: List[dict]) -> bool:
+        temp_last_hash = "0" * 64
+        for entry in journal:
+            # We copy to not mutate original
+            e = entry.copy()
+            if "signature" not in e: return False
+            sig = e.pop("signature")
+            content = json.dumps(e, sort_keys=True)
+            chain_input = f"{temp_last_hash}|{content}".encode()
+            expected_hash = hmac.new(self.secret_key, chain_input, hashlib.sha256).hexdigest()
+            if sig != expected_hash:
+                return False
+            temp_last_hash = sig
+        return True
 
 class ApprovalRequest(BaseModel):
     id: str
@@ -81,6 +113,8 @@ class Scheduler:
         self.tick_count = 0 
         self.approvals = ApprovalStore()
         self.approval_policy = ApprovalPolicy()
+        # Initialize Journal Integrity with Kernel Key as secret (v1.9)
+        self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
 
     def set_agent(self, agent_name: str, pid: int = 0):
         self.current_agent = agent_name
@@ -190,7 +224,6 @@ class Scheduler:
 
         # 0.2 Immutable Role Recovery (v1.8)
         if instr.action == "syscall" and "func=set_role" in (instr.metadata or ""):
-            # Simulation of role change attempt via syscall
             match = re.search(r'agent=([a-zA-Z0-9_-]+)', instr.metadata)
             if match:
                 target_agent = match.group(1)
@@ -298,7 +331,15 @@ class Scheduler:
             "result": display_result,
             "metadata": instr.metadata 
         }
+        # Sign the entry and chain it (v1.9)
+        entry["signature"] = self.journal_guard.sign(entry)
+        
         self.audit_log.append(entry)
         if self.store.storage:
             log_path = os.path.join(self.store.storage.base_dir, "kernel_journal.jsonl")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, "a") as f: f.write(json.dumps(entry) + "\n")
+
+    def verify_journal(self) -> bool:
+        """Verifies the integrity of the in-memory audit log."""
+        return self.journal_guard.verify_chain(self.audit_log)
