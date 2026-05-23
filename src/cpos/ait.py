@@ -43,6 +43,7 @@ class AITCodec:
         'x': 'ps',
         'y': 'syscall',
         'a': 'policy',
+        'j': 'mode',
         'e': 'exchange',
         'v': 'device',
         'k': 'lock',

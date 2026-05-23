@@ -44,6 +44,7 @@ class EAPParser:
         'DEV': 'device',
         'CONNECT': 'connect',
         'POLICY': 'policy',
+        'MODE': 'mode',
         'LOCK': 'lock',
         'UNLOCK': 'unlock'
     }

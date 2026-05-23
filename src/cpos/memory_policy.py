@@ -1,7 +1,13 @@
-from typing import List, Literal, Dict
+from enum import Enum
+from typing import List, Literal, Dict, Optional
 from pydantic import BaseModel
 from .registry import ContextObject, ContextRegistry
 from .context_store import ContextStore
+
+class CognitiveMode(str, Enum):
+    NORMAL = "normal"           # On-demand
+    PREDICTIVE = "predictive"   # Task-aware prefetch
+    AUTONOMOUS = "autonomous"   # Self-healing / re-validation
 
 class RetrievalPolicy(BaseModel):
     """Retrieval Governance Policy as defined in Spec v0.1 Section 9."""
@@ -13,6 +19,8 @@ class RetrievalPolicy(BaseModel):
     audit_required: bool = True
     # Control sensitivity redaction behavior
     max_sensitivity_allowed: Literal["public", "internal", "private", "restricted"] = "internal"
+    # [CPOS v0.5] Global Cognitive Mode
+    mode: CognitiveMode = CognitiveMode.NORMAL
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""
