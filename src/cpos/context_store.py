@@ -12,11 +12,28 @@ class ContextStore:
         self.gateways = None # [CPOS v0.4] Reference to GatewayManager
 
     def load(self, ctx_id: str, priority: int = 5, _seen: Optional[set] = None) -> bool:
-        # [CPOS v0.4] Handle Distributed or External Pointer URI
+        # [CPOS v0.4/v1.0] Handle Distributed or External Pointer URI
         if ctx_id.startswith("ptr://"):
             try:
-                # Format: ptr://ext.github/path/to/resource
-                if ctx_id.startswith("ptr://ext.") and self.gateways:
+                # [CPOS v1.0] MCP Protocol Support
+                # Format: ptr://mcp.<server>/<path>
+                if ctx_id.startswith("ptr://mcp.") and self.gateways:
+                    parts = ctx_id[10:].split("/", 1)
+                    server_id = parts[0]
+                    path = parts[1] if len(parts) > 1 else ""
+                    
+                    # Route to the internal 'mcp' gateway
+                    remote_obj = self.gateways.resolve("mcp", f"{server_id}/{path}")
+                    if remote_obj:
+                        self.registry.register(remote_obj)
+                        ctx_id = remote_obj.id
+                        print(f"--- [STORE] MCP Context {ctx_id} mounted via {server_id} ---")
+                    else:
+                        print(f"--- [STORE ERROR] Failed to resolve MCP context {ctx_id} ---")
+                        return False
+
+                # Format: ptr://ext.<gateway>/path (Generic Gateway)
+                elif ctx_id.startswith("ptr://ext.") and self.gateways:
                     parts = ctx_id[10:].split("/", 1)
                     gateway_name = parts[0]
                     path = parts[1] if len(parts) > 1 else ""
