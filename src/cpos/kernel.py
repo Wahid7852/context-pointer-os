@@ -22,9 +22,9 @@ class CPOS:
     def boot(self, script: list):
         return self.bootloader.boot(script)
 
-    def step(self, instruction: str, agent: str = "root"):
+    def step(self, instruction: str, agent: str = "root", pid: int = 0):
         """Executes a single instruction and runs homeostasis (GC/Paging)."""
-        self.scheduler.set_agent(agent)
+        self.scheduler.set_agent(agent, pid=pid)
         res = self.scheduler.dispatch(instruction)
         
         # Homeostasis: Run memory policy and background checks
@@ -34,3 +34,18 @@ class CPOS:
 
     def save_report(self, path: str = "cpos_dashboard.html"):
         render_dashboard(self.registry, self.store, self.scheduler.audit_log, path)
+
+    def restore(self, snapshot_path: str):
+        """Reboots the system from a disk image."""
+        import json
+        with open(snapshot_path, "r") as f:
+            data = json.load(f)
+            # Restore Registry
+            self.registry.registry = {}
+            for item in data["registry"]:
+                obj = ContextObject(**item)
+                self.registry.register(obj)
+            # Restore ACL Roles
+            for agent, role_val in data["acl"]["roles"].items():
+                self.acl.set_role(agent, Role(role_val))
+        print(f"--- [KERNEL] System restored from {snapshot_path} ---")

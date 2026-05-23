@@ -14,7 +14,15 @@ class ContextStore:
         if not obj:
             return False
         
-        # Load from storage if storage manager is present
+        # 1. Handle Swap-In
+        if obj.state.paged and self.storage and obj.swap_ref:
+            content = self.storage.read(obj.swap_ref)
+            if content:
+                obj.data = content
+                obj.state.paged = False
+                print(f"Swap-In: {ctx_id} restored from .swap")
+
+        # 2. Standard Load from storage
         if not obj.state.loaded and self.storage:
             content = self.storage.read(obj.content_ref)
             if content:

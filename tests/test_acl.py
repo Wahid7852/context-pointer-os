@@ -1,24 +1,41 @@
 import pytest
-from cpos.registry import ContextRegistry, ContextObject
-from cpos.context_store import ContextStore
-from cpos.scheduler import Scheduler
-from cpos.acl import AccessControlList, Role
+from src.cpos.acl import AccessControlList, Role
 
-def test_acl_guest_denied():
-    registry = ContextRegistry()
-    registry.register(ContextObject(id="ctxP", type="persona", title="P", content_ref="", summary="S", tokens_estimate=10))
+def test_acl_roles():
+    acl = AccessControlList()
+    acl.set_role("admin", Role.ROOT)
+    acl.set_role("guest_user", Role.GUEST)
+    
+    assert acl.get_role("admin") == Role.ROOT
+    assert acl.get_role("guest_user") == Role.GUEST
+    assert acl.get_role("unknown") == Role.GUEST # Verified: Default is GUEST in src/cpos/acl.py
+
+def test_acl_check_root():
+    acl = AccessControlList()
+    # admin doesn't have ROOT role yet, but check handles 'root' agent name or ROOT role
+    assert acl.check("root", "ctx1", "memory") is True
+    
+    acl.set_role("admin", Role.ROOT)
+    assert acl.check("admin", "ctx1", "any") is True
+
+def test_acl_check_guest_restrictions():
     acl = AccessControlList()
     acl.set_role("guest", Role.GUEST)
-    scheduler = Scheduler(ContextStore(registry), acl)
     
-    scheduler.set_agent("guest")
-    res = scheduler.dispatch(">MEM:LOAD #ctxP !9")
-    assert res["status"] == "error"
-    assert "PERMISSION_DENIED" in res["result"]
+    # Sensitive types restricted for GUEST
+    assert acl.check("guest", "ctx7", "neurostate") is False
+    assert acl.check("guest", "ctx1", "memory") is False # No permission granted
 
-def test_acl_root_allowed():
-    registry = ContextRegistry()
-    registry.register(ContextObject(id="ctxP", type="persona", title="P", content_ref="", summary="S", tokens_estimate=10))
-    scheduler = Scheduler(ContextStore(registry)) # defaults to root
-    res = scheduler.dispatch(">MEM:LOAD #ctxP !9")
-    assert res["status"] == "ok"
+def test_acl_grant():
+    acl = AccessControlList()
+    acl.set_role("user1", Role.USER)
+    acl.grant("user1", "ctx1")
+    assert acl.check("user1", "ctx1", "memory") is True
+    assert acl.check("user1", "ctx2", "memory") is False
+
+def test_acl_grant_type():
+    acl = AccessControlList()
+    acl.set_role("user1", Role.USER)
+    acl.grant_type("user1", "log")
+    assert acl.check("user1", "ctx_log_1", "log") is True
+    assert acl.check("user1", "ctx1", "memory") is False

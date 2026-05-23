@@ -15,9 +15,16 @@ class AccessControlList:
         self.permissions: Dict[str, Set[str]] = {}
         # agent_name -> list of regex patterns or prefix for allowed types
         self.type_permissions: Dict[str, List[str]] = {}
+        # New: Immutable flags to prevent role hijacking
+        self.immutable_agents: Set[str] = {"root"}
 
-    def set_role(self, agent: str, role: Role):
+    def set_role(self, agent: str, role: Role, is_immutable: bool = False):
         self.agent_roles[agent] = role
+        if is_immutable:
+            self.immutable_agents.add(agent)
+
+    def is_immutable(self, agent: str) -> bool:
+        return agent in self.immutable_agents
 
     def get_role(self, agent: str) -> Role:
         return self.agent_roles.get(agent, Role.GUEST)

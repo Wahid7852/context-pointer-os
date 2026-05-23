@@ -10,16 +10,17 @@ class MemoryPolicy:
         self.token_limit = token_limit
 
     def evaluate_forgetting(self):
-        """Identifies low-importance/old contexts to unload or compress."""
+        """Identifies low-importance/old/cold contexts to unload or compress."""
         active = list(self.store.active_contexts.values())
         total_tokens = sum(obj.tokens_estimate for obj in active)
         
         if total_tokens <= self.token_limit:
             return []
 
-        # Sort by importance (ascending) and freshness (ascending)
-        # Lowest priority first
-        active.sort(key=lambda x: (x.importance, x.freshness))
+        # Sort by composite score: 
+        # (importance * 0.4) + (access_heat * 0.4) + (freshness * 0.2)
+        # Lowest score first for removal
+        active.sort(key=lambda x: (x.importance * 0.4) + (x.access_heat * 0.4) + (x.freshness * 0.2))
         
         to_unload = []
         reduction = 0
@@ -36,10 +37,20 @@ class MemoryPolicy:
         targets = self.evaluate_forgetting()
         for ctx_id in targets:
             obj = self.registry.get(ctx_id)
-            if obj and obj.importance > 0.6:
-                # Instead of unloading, Swap to Summary (Paging)
-                print(f"Paging: Swapping {ctx_id} for Summary to save tokens")
-                self.store.load_summary(ctx_id)
+            if not obj: continue
+            
+            if obj.importance > 0.6:
+                # 1. Cognitive Swap (Full Disk Serialization)
+                if self.store.storage and obj.data:
+                    swap_ref = f"swap://{obj.id}"
+                    self.store.storage.write(swap_ref, str(obj.data))
+                    obj.swap_ref = swap_ref
+                    obj.state.paged = True
+                    obj.data = f"[PAGED TO DISK] {obj.summary}"
+                    print(f"Swap-Out: {ctx_id} serialized to .swap")
+                else:
+                    # Fallback to Summary-only if no storage
+                    self.store.load_summary(ctx_id)
             else:
                 self.store.unload(ctx_id)
         return targets

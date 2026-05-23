@@ -8,6 +8,13 @@ Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage
 
 CPOS maps standard OS components to cognitive architecture:
 
+- **LLM** = **CPU** (Reasoning Engine)
+- **CPOS** = **Kernel** (Process & Memory Manager)
+- **ContextStore** = **RAM** (Active context in prompt)
+- **StorageManager** = **Disk** (Persistent semantic memory)
+- **AIT/EAP** = **Instruction Bus** (Agent-to-Kernel link)
+- **NeuroState** = **Registers / Flags** (Emotional/Ethical state)
+
 | OS Component | Cognitive Mapping |
 | :--- | :--- |
 | **LLM** | **CPU** (Reasoning Engine) |

@@ -38,7 +38,9 @@ class AITCodec:
         'i': 'ls',
         'x': 'ps',
         'y': 'syscall',
-        'v': 'device'
+        'v': 'device',
+        'k': 'lock',
+        'n': 'unlock'
     }
 
     @classmethod

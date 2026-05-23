@@ -34,7 +34,9 @@ class EAPParser:
         'LS': 'ls',
         'PS': 'ps',
         'SYS': 'syscall',
-        'DEV': 'device'
+        'DEV': 'device',
+        'LOCK': 'lock',
+        'UNLOCK': 'unlock'
     }
 
     @classmethod

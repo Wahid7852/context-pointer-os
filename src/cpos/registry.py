@@ -6,6 +6,7 @@ class ContextState(BaseModel):
     loaded: bool = False
     cached: bool = True
     dirty: bool = False
+    paged: bool = False # New: On-disk swap state
 
 class ContextObject(BaseModel):
     id: str
@@ -16,10 +17,15 @@ class ContextObject(BaseModel):
     tokens_estimate: int
     importance: float = 0.5
     freshness: float = 1.0
-    access_heat: float = 0.0  # Cognitive Resource usage
+    access_heat: float = 0.0
+    owner_pid: Optional[int] = None # New: Process ownership
+    locked_by: Optional[int] = None # New: Mutex lock
+    swap_ref: Optional[str] = None # New: Reference to .swap file
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    last_accessed: float = Field(default_factory=lambda: datetime.now().timestamp()) # For real-time decay
     parent: Optional[str] = None
+
     branches: List[str] = []
     permissions: List[str] = []
     state: ContextState = Field(default_factory=ContextState)
