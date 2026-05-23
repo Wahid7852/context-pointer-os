@@ -4,6 +4,10 @@
 
 Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage the memory, state, and security of LLM-based agents. Instead of feeding an agent's entire history into the prompt, CPOS allows agents to manage their context through **Pointers**, treating context like traditional RAM and Disk.
 
+## 📜 Documents
+
+- [Context Pointer OS Specification v0.1](docs/specification_v0.1.md) - The foundational specification for memory management and governance.
+
 ## 🧠 Conceptual Mapping
 
 CPOS maps standard OS components to cognitive architecture:

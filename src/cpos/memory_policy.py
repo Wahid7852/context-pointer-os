@@ -1,6 +1,18 @@
-from typing import List
+from typing import List, Literal, Dict
+from pydantic import BaseModel
 from .registry import ContextObject, ContextRegistry
 from .context_store import ContextStore
+
+class RetrievalPolicy(BaseModel):
+    """Retrieval Governance Policy as defined in Spec v0.1 Section 9."""
+    allowed_context_types: List[str] = ["project_memory", "code", "spec", "neurostate", "persona", "pointer_exchange", "message"]
+    blocked_context_types: List[str] = ["private_credentials", "restricted_intel"]
+    max_retrieval_depth: int = 2
+    minimum_trust_score: float = 0.5
+    requires_human_approval: bool = False
+    audit_required: bool = True
+    # Control sensitivity redaction behavior
+    max_sensitivity_allowed: Literal["public", "internal", "private", "restricted"] = "internal"
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

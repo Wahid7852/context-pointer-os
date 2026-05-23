@@ -10,7 +10,7 @@ class AccessControlList:
     """The 'Protection Layer'. Enforces roles and permissions."""
     def __init__(self):
         # agent_name -> Role
-        self.agent_roles: Dict[str, Role] = {}
+        self.agent_roles: Dict[str, Role] = {"root": Role.ROOT}
         # agent_name -> set of ctx_ids they can access
         self.permissions: Dict[str, Set[str]] = {}
         # agent_name -> list of regex patterns or prefix for allowed types
