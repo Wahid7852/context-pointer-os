@@ -7,6 +7,7 @@ from .memory_policy import MemoryPolicy
 from .boot import CognitiveBootloader
 from .dashboard import render_dashboard
 from .node_link import NodeLink
+from .gateway import GatewayManager
 
 class CPOS:
     """The 'Standard Distribution' Master Class. Wires everything together."""
@@ -14,7 +15,9 @@ class CPOS:
         self.registry = ContextRegistry()
         self.acl = AccessControlList()
         self.storage = StorageManager(base_dir=workspace)
+        self.gateways = GatewayManager() # [CPOS v0.4] Gateway Management
         self.store = ContextStore(self.registry, self.storage)
+        self.store.gateways = self.gateways # Give store access to gateways
         self.scheduler = Scheduler(self.store, self.acl)
         self.policy = MemoryPolicy(self.store, token_limit=token_limit)
         self.bootloader = CognitiveBootloader(self.scheduler)
