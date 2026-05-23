@@ -1,27 +1,29 @@
 # Context Pointer OS (CPOS) v1.0
 
-> A Lightweight Virtual Memory Operating System for LLM Agents.
+> **LLM agents don’t need bigger memory. They need memory addresses.**
 
-Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage the memory, state, and security of LLM-based agents. Instead of feeding an agent's entire history into the prompt, CPOS allows agents to manage their context through **Pointers**, just like a traditional OS manages RAM and Disk.
+Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage the memory, state, and security of LLM-based agents. Instead of feeding an agent's entire history into the prompt, CPOS allows agents to manage their context through **Pointers**, treating context like traditional RAM and Disk.
+
+## 🧠 Conceptual Mapping
+
+CPOS maps standard OS components to cognitive architecture:
+
+| OS Component | Cognitive Mapping |
+| :--- | :--- |
+| **LLM** | **CPU** (Reasoning Engine) |
+| **CPOS** | **Kernel** (Process & Memory Manager) |
+| **ContextStore** | **RAM** (Active context in prompt) |
+| **StorageManager** | **Disk** (Persistent semantic memory) |
+| **AIT/EAP** | **Instruction Bus** (Agent-to-Kernel link) |
+| **NeuroState** | **Registers / Flags** (Emotional/Ethical state) |
 
 ## 🚀 Key Features
 
 - **Context Pointers (#ctx):** Refer to memory segments by ID. Load/Unload them dynamically to save tokens.
 - **Cognitive RAM & Paging:** Automatic swapping of large contexts into "Summary Views" when token limits are reached.
-- **NeuroState Integration:** Built-in registers for emotional and ethical state monitoring.
-- **Instruction Tapes (AIT/EAP):** 4-character machine code (`m4l8`) and assembly-like language (`>MEM:LOAD #ctx4 !8`) for fast agent-to-kernel communication.
-- **Hardened Security:** Role-Based Access Control (ROOT, USER, GUEST) and a physical Kernel Key for registry protection.
-- **Speculative Branching:** Fork context timelines (#ctx4.a) to test hypotheses and merge them back to root.
-- **Inter-Process Communication (IPC):** Secure messaging between different sub-agents.
+- **Speculative Branching:** Fork context timelines (#ctx4.hyp_a) to test hypotheses and merge them back to root.
+- **Hardened Security:** Role-Based Access Control (ROOT, USER, GUEST) and automated memory redaction.
 - **Watchdog & IRQ:** Automated self-healing interrupts if system corruption is detected.
-
-## 🏗️ Architecture
-
-- **CPU:** LLM (Reasoning Engine)
-- **RAM:** `ContextStore` (Active context injected into prompt)
-- **Disk:** `StorageManager` (Persistent pointer-based memory)
-- **BIOS:** `CognitiveBootloader` (Automatic system initialization)
-- **Task Manager:** HTML Dashboard for real-time cognitive monitoring.
 
 ## 🛠️ Quick Start
 
@@ -30,17 +32,21 @@ Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage
 ```bash
 git clone https://github.com/kagioneko/context-pointer-os.git
 cd context-pointer-os
-pip install pydantic
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .
 ```
 
 ### Running the Demo
+
+CPOS includes a full lifecycle demo showcasing boot, multi-agent interaction, and recovery.
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 python3 src/cpos/demo_v10.py
 ```
 
-This will execute a full lifecycle demo: **Boot -> Multi-Agent Interaction -> Stress Test -> Panic Recovery -> Dashboard Generation.**
+**Expected Result:** A task manager dashboard `final_cpos_v10_report.html` is generated, showing the cognitive state.
 
 ## 📟 Instruction Set (AIT)
 
@@ -50,17 +56,6 @@ The core machine code format is `D T A P`:
 - **A (Action):** `l`oad, `u`nload, `w`rite, `b`ranch, `g`erge, `p`ost(send), `i`(ls), `x`(ps)
 - **P (Priority):** 1 (Low) to 9 (IRQ/High)
 
-Example: `m4l8` -> Memory / ctx4 / Load / Priority 8
-
-## 📊 Dashboard
-
-CPOS generates a visual Task Manager (`final_cpos_v10_report.html`) to show:
-- Memory Map with **Access Heat** (Throttling indicators)
-- Active RAM contents
-- Full Audit Log with agent attribution
-
----
-
 ## 📜 License
 
-MIT License - feel free to use it for your own cognitive architectures!
+MIT License
