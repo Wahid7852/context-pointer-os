@@ -99,7 +99,7 @@ class Scheduler:
         elif instr.action == "branch":
             suffix = instr.metadata if instr.metadata else "a"
             branch_obj = self.registry.branch(instr.target_id, suffix)
-            if branch_obj: self.store.load(branch_id, effective_priority); result = f"Branched"
+            if branch_obj: self.store.load(branch_obj.id, effective_priority); result = f"Branched"
             else: status = "error"; result = "ERR_BRANCH_FAILED"
         elif instr.action == "merge":
             if not obj.parent: status = "error"; result = "ERR_NOT_A_BRANCH"

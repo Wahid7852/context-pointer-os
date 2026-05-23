@@ -31,7 +31,7 @@ class AITCodec:
         'q': 'query',
         'w': 'write',
         'f': 'forget',
-        'v': 'validate',
+        't': 'validate',
         's': 'sync',
         'p': 'send',
         'c': 'gc',

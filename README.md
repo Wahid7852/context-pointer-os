@@ -28,7 +28,7 @@ Context Pointer OS (CPOS) is a specialized "Cognitive Kernel" designed to manage
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/context-pointer-os.git
+git clone https://github.com/kagioneko/context-pointer-os.git
 cd context-pointer-os
 pip install pydantic
 ```
