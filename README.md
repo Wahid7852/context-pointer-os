@@ -24,7 +24,9 @@ Context Pointer OS (CPOS) is a specialized memory management layer for long-runn
        [ LLM Prompt (Active Context / RAM) ]
                     ↑
              Context Pointers (#ctx)
-                    ↑
+          /         |          \
+   [Branch A]    [Main]     [Branch B]  (Speculative Hypotheses)
+          \         |          /
        [ CPOS Kernel (Memory Registry) ]
           /         |          \
  [Local Disk]  [Vector DB]  [MCP Servers]
@@ -66,11 +68,14 @@ System Status after Watchdog IRQ: Stable (corruption=0.0)
 ## 🧠 Core Architecture (v0.1 Implemented)
 
 ### 📂 Context Pointers (#ctx)
-Pointers are lightweight references to memory. They allow the agent to keep its prompt space clean while retaining the ability to "recall" specific data on demand via the Registry.
+Pointers are lightweight references to memory. They allow the agent to keep its prompt clean while retaining the ability to "recall" specific data on demand via the Registry.
 
 ### 💾 Cognitive RAM & Paging
 - **Active Contexts**: Only specific pointers occupy the LLM's immediate prompt space.
 - **Homeostasis**: The kernel automatically summarizes or swaps unused pointers to disk when context limits are reached.
+
+### 🧪 Speculative Branching
+Supports creating isolated context "branches" to test hypotheses safely. Changes in a branch do not affect the main memory until explicitly **COMMITTED**, allowing for complex trial-and-error reasoning.
 
 ### 📊 Runtime Monitoring & Watchdog
 Real-time monitoring of agent "stability" metrics. The **Kernel Watchdog** can trigger hardware-level interrupts (IRQ) to reset the agent or clear corrupted context if internal health scores exceed safety thresholds.
@@ -112,7 +117,6 @@ pytest tests/
 ## 🗺️ Roadmap (Future Concepts)
 
 - **v0.2**: Governance Layer (Sensitivity-based redaction).
-- **v0.3**: Speculative Branching (Hypothesis sandboxing).
 - **v0.4**: Distributed Swarm (Inter-node pointer exchange).
 - **v0.5**: Predictive Scheduling (Neural prefetching).
 
