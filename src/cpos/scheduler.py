@@ -200,6 +200,18 @@ class Scheduler:
             if obj.status == "stale" and obj.source and (obj.source.startswith("github_api") or obj.source == "external_db"):
                 obj.status = "active"; obj.trust_score = min(1.0, obj.trust_score + 0.05)
                 self.registry._log_event("auto_validation", obj.id, {"status": "restored"})
+            # [CPOS v5.0] Refresh Environmental Sensors
+            if obj.type == "sensor" and self.store.gateways:
+                # Sensors always update on tick if autonomous
+                category = obj.source.split(":")[-1] if ":" in obj.source else "system"
+                sensor_id = obj.id.replace("env_", "")
+                fresh_obj = self.store.gateways.resolve("env", f"{category}/{sensor_id}")
+                if fresh_obj:
+                    obj.data = fresh_obj.data
+                    obj.updated_at = datetime.now()
+                    # If it's loaded in RAM, update it there too
+                    if obj.id in self.store.active_contexts:
+                        self.store.active_contexts[obj.id].data = obj.data
 
     def _prefetch(self, target_id: str):
         target = self.registry.get(target_id)

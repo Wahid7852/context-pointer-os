@@ -32,6 +32,23 @@ class ContextStore:
                         print(f"--- [STORE ERROR] Failed to resolve MCP context {ctx_id} ---")
                         return False
 
+                # [CPOS v5.0] Environmental Awareness Support
+                # Format: ptr://env.<category>/<sensor_id>
+                elif ctx_id.startswith("ptr://env.") and self.gateways:
+                    parts = ctx_id[10:].split("/", 1)
+                    category = parts[0]
+                    sensor = parts[1] if len(parts) > 1 else ""
+                    
+                    # Route to the internal 'env' gateway
+                    remote_obj = self.gateways.resolve("env", f"{category}/{sensor}")
+                    if remote_obj:
+                        self.registry.register(remote_obj)
+                        ctx_id = remote_obj.id
+                        print(f"--- [STORE] Environmental Context {ctx_id} mounted ---")
+                    else:
+                        print(f"--- [STORE ERROR] Failed to resolve environmental context {ctx_id} ---")
+                        return False
+
                 # Format: ptr://ext.<gateway>/path (Generic Gateway)
                 elif ctx_id.startswith("ptr://ext.") and self.gateways:
                     parts = ctx_id[10:].split("/", 1)

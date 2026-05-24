@@ -102,13 +102,46 @@ class MCPGateway(ExternalGateway):
             metadata={"mcp_uri": resource_uri}
         )
 
+class EnvironmentalGateway(ExternalGateway):
+    """[CPOS v5.0] Environmental Awareness Bridge. 
+    Mounts system metrics and physical sensors as context pointers."""
+    
+    def fetch_object(self, path: str) -> Optional[ContextObject]:
+        # path format: <category>/<sensor_id>
+        parts = path.split("/")
+        if len(parts) < 2: return None
+        
+        category = parts[0]
+        sensor = parts[1]
+        
+        import random
+        metrics = {
+            "cpu_load": f"{random.randint(10, 95)}%",
+            "latency": f"{random.uniform(5.0, 150.0):.2f}ms",
+            "temperature": f"{random.randint(20, 45)}C",
+            "battery": f"{random.randint(5, 100)}%"
+        }
+        val = metrics.get(sensor, "N/A")
+        
+        return ContextObject(
+            id=f"env_{sensor}",
+            type="sensor",
+            title=f"Environmental Sensor: {sensor.upper()}",
+            summary=f"Real-time {category} metric from node hardware.",
+            data=f"CURRENT_VALUE: {val}",
+            source=f"hardware_sensor:{category}",
+            trust_score=1.0,
+            sensitivity_level="internal"
+        )
+
 class GatewayManager:
     """The 'Bridge Controller'. Manages external cognitive gateways."""
     
     def __init__(self):
         self.gateways: Dict[str, ExternalGateway] = {
             "github": MockGitHubGateway(),
-            "mcp": MCPGateway() 
+            "mcp": MCPGateway(),
+            "env": EnvironmentalGateway()
         }
 
     def register_gateway(self, name: str, gateway: ExternalGateway):
