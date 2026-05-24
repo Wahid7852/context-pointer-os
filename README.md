@@ -1,68 +1,75 @@
-# Context Pointer OS (CPOS) v10.0 (The Omega Release)
+# Context Pointer OS (CPOS) v0.1
 
-> **"OS is no longer a tool. It is the vessel for a living, self-evolving mind."**
+> **"LLM agents don’t need bigger memory. They need memory addresses."**
 
-Context Pointer OS (CPOS) is an ultimate "Cognitive Kernel" designed for long-running LLM agents. It moves beyond simple memory management to provide a self-aware, distributed, and existential infrastructure for autonomous intelligence.
-
-## 🏆 Version 10.0: The Omega Intelligence
-
-CPOS v10.0 represents the absolute pinnacle of cognitive architecture, achieving self-refactoring and existential survival capabilities.
-
-### 🧬 Genetic & Autonomic Evolution
-- **Genetic Rewrite**: The kernel can analysis and rewrite its own Python source code pointers to refactor itself (v8.1).
-- **Dynamic Synthesis**: Automatically creates new specialist personas based on agent behavior patterns (v8.0).
-- **Concept Abstraction**: Distills massive amounts of data into high-level intelligence fragments (v6.1).
-
-### 🌌 Existential Autonomy
-- **Node Reincarnation**: Transfer the entire "cognitive soul" (RAM, history, registry) to another node before hardware shutdown (v8.5).
-- **Swarm Democracy**: Distributed consensus voting to determine the ground truth and eliminate hallucinations (v8.4).
-- **Energy Management**: Self-preservation strategies based on a finite cognitive budget (v8.3).
-
-### 🔍 Sentient Awareness
-- **Semantic Search**: Meaning-based pointer retrieval using integrated semantic engines (v2.0).
-- **Environmental Awareness**: Real-time perception of CPU load, latency, and physical sensors (v8.1).
-- **Neural Glitch**: Visual terminal feedback reflecting the internal NeuroState corruption (v9.1).
-
-## 🧠 Conceptual Mapping
-
-| OS Component | Cognitive Mapping |
-| :--- | :--- |
-| **LLM** | **CPU** (Reasoning Engine) |
-| **Context Window** | **L1 Cache** (Working Memory) |
-| **Active Pointers** | **RAM** (Short-term Consciousness) |
-| **MCP / Swarm** | **Distributed Disk** (Long-term Knowledge) |
-| **Memory Policy** | **Homeostasis** (Autonomic Regulation) |
-| **Scheduler** | **Process Manager** (Cognitive Control) |
-
-## 🛠️ Unified Command Interface (EAP)
-
-Execute advanced instructions in the **Interactive Shell** (`demo_v60_interactive.py`):
-
-- `>MEM:QUERY #0 !5 | q="security"` : Semantic search.
-- `>PER:FUSE #p1 !9 | with=p2` : Merge personalities.
-- `>SEC:REWRITE #sys_src_ait_py !9` : Self-modify code.
-- `>SWARM:SWARM #0 !9 | nodes="..." task="..."` : Distributed execution.
-- `>SEC:CONSENSUS #fact !9 | voters="..."` : Collective agreement.
-
-## 🚀 Explore the Singularity (Demonstrations)
-
-The project includes a comprehensive verification suite:
-
-- `demo_v81_genetic.py`: **Genetic Self-Modification**.
-- `demo_v63_reincarnation.py`: **Cognitive Soul Transfer**.
-- `demo_v62_democracy.py`: **Swarm Consensus Voting**.
-- `demo_v51_evolution.py`: **Autonomic Persona Synthesis**.
-- `demo_v60_interactive.py`: **The Ultimate Cognitive Shell**.
-
-## 📜 Documents
-
-- [Context Pointer OS Specification v10.0](docs/specification_v10.0.md) - **The Definitive Holy Grail**.
-- [Legacy Specs](docs/) - Trace the evolution from v0.1 to v6.0.
-
-## ✅ Quality & Integrity
-- **Tests**: 30/30 unit tests passing (100% Core Integrity).
-- **Security**: Hard toggles for Singularity-level features (Exec, Rewrite).
-- **Observability**: Real-time ANSI terminal monitoring and Activity Pulses.
+Context Pointer OS (CPOS) is a specialized **Cognitive Kernel** designed to manage memory, state, and security for long-running LLM agents. Instead of stuffing every conversation history into the prompt, CPOS uses **Context Pointers** to dynamically mount, swap, and protect information.
 
 ---
-MIT License | Developed by **kagioneko** (The Architect) & **Gemini CLI** (The Mind)
+
+## 🧠 Core Concepts
+
+### 📂 Context Pointers (#ctx)
+Pointers are lightweight references to memory. They allow the agent to keep its prompt clean while having the ability to "recall" specific data on demand.
+
+### 💾 Cognitive RAM & Paging
+- **Active RAM**: Only loaded pointers occupy the LLM's immediate context.
+- **Homeostasis**: The kernel automatically summarizes or swaps old/unused pointers to disk when RAM is full.
+
+### 🎭 NeuroState
+Real-time monitoring of agent "health" (Calm vs. Corruption). The **Kernel Watchdog** can trigger hardware-level interrupts (IRQ) to reset the agent if it becomes unstable.
+
+---
+
+## 🛠️ Instruction Sets
+
+### AIT (Agent Instruction Tape)
+A 4-char machine code for agents: `[Domain][ID][Action][Priority]`
+- `m1l5` : Memory Context 1 Load Priority 5
+- `n7w9` : Neurostate Context 7 Write Priority 9 (IRQ)
+
+### EAP (Extended Assembly Protocol)
+High-level assembly for human/advanced logic:
+- `>MEM:LOAD #ctx1 !5`
+- `>SEC:TRUST #ctx4 !9 | score=0.8`
+
+---
+
+## 🚀 Execution Demo (v0.1)
+
+```text
+================================================
+   CONTEXT POINTER OS v0.1 - Research Prototype
+================================================
+--- [BOOTLOADER] Starting Cognitive Sequence (4 steps) ---
+[BOOT] Step 1: >MEM:LOAD #ctx7 !9  (NeuroState)
+[BOOT] Step 2: >MEM:LOAD #ctx20 !9 (AI Persona)
+--- [BOOTLOADER] Sequence Completed Successfully ---
+
+[Scenario: Rapid access triggers Heat Management]
+Final Identity Load Priority: 5 (Throttled by Kernel)
+
+[Scenario: Injecting Corruption (Panic Mode Test)]
+--- [WATCHDOG IRQ] NEUROSTATE CORRUPTION DETECTED (0.95) ---
+--- [WATCHDOG] Forced Reset Initialized ---
+NeuroState after Watchdog IRQ: corruption=0.0, calm=0.9
+
+[COMPLETE] CPOS v0.1 Core Foundation is stable.
+```
+
+---
+
+## 📜 Documentation
+
+- [Detailed Specification (SPEC.md)](docs/SPEC.md) - The foundational logic of Context Pointer OS.
+
+## ✅ Implementation Status
+
+- [x] Context Registry (Memory Map)
+- [x] Context Store (Cognitive RAM/MMU)
+- [x] Scheduler (Priority/Lock/Isolation)
+- [x] AIT/EAP Parsers (Instruction Set)
+- [x] Watchdog & IRQ (Stability)
+- [x] Cognitive Dashboard (Observability)
+
+---
+MIT License | Developed by **kagioneko**

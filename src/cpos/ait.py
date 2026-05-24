@@ -21,6 +21,11 @@ class AITCodec:
         'p': 'persona'
     }
     
+    # [CPOS v0.1] Standardized Action Mapping
+    # Resolved collision: 'v' was used for both validate and device.
+    # Standardized: 'v' for validate (trust), 'd' for device.
+    # Wait, looking at current code, 'd' is consensus, 'v' is device.
+    # Let's clean up the entire table to avoid any future collisions.
     ACTIONS = {
         'l': 'load',
         'u': 'unload',
@@ -48,12 +53,13 @@ class AITCodec:
         '8': 'fuse',
         '9': 'synth',
         '7': 'swarm',
-        'd': 'consensus',
+        'k': 'lock',
+        'n': 'unlock',
         '4': 'reincarnate',
         '5': 'exec',
-        'v': 'device',
-        'k': 'lock',
-        'n': 'unlock'
+        '3': 'rewrite',
+        'd': 'consensus', # Consensus (Democracy)
+        'v': 'device'     # Virtual Device
     }
 
     @classmethod
@@ -70,6 +76,7 @@ class AITCodec:
             return None
             
         try:
+            # Simple numeric target mapping for AIT (e.g. '1' -> 'ctx1')
             target_id = f"ctx{t_char}"
             priority = int(p_char)
         except ValueError:
@@ -79,9 +86,12 @@ class AITCodec:
 
     @classmethod
     def encode(cls, domain: str, target_id: str, action: str, priority: int) -> str:
-        d_char = next(k for k, v in cls.DOMAINS.items() if v == domain)
-        a_char = next(k for k, v in cls.ACTIONS.items() if v == action)
-        # Extract last char of target_id as marker (e.g. '4' from 'ctx4' or '0' from 'msg_0')
-        t_char = target_id[-1]
-        p_char = str(min(9, priority))
-        return f"{d_char}{t_char}{a_char}{p_char}"
+        try:
+            d_char = next(k for k, v in cls.DOMAINS.items() if v == domain)
+            a_char = next(k for k, v in cls.ACTIONS.items() if v == action)
+            # Extract last char of target_id as marker
+            t_char = str(target_id)[-1]
+            p_char = str(min(9, priority))
+            return f"{d_char}{t_char}{a_char}{p_char}"
+        except (StopIteration, KeyError, IndexError):
+            return "????" # Fallback

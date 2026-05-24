@@ -427,8 +427,15 @@ class Scheduler:
                     except Exception as e: status = "error"; result = f"REWRITE_FAILED: {str(e)}"
                 else: status = "error"; result = "ERR_NOT_SYSTEM_CODE"
             elif instr.action == "branch":
-                b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
-                if b: b.trust_score = 0.4; self.store.load(b.id); result = f"Branched: {b.id}"
+                b_obj = self.registry.branch(instr.target_id, instr.metadata or "hyp")
+                if b_obj:
+                    # CPOS v0.3: Initial trust for hypotheses is lower
+                    b_obj.trust_score = 0.4
+                    b_obj.status = "active"
+                    b_obj.metadata["is_hypothesis"] = True
+                    self.store.load(b_obj.id, effective_priority)
+                    result = f"Branched: {b_obj.id}"
+                else: status = "error"; result = "ERR_BRANCH_FAILED"
             elif instr.action == "commit":
                 if obj and obj.parent:
                     p = self.registry.get(obj.parent)

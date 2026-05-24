@@ -52,7 +52,8 @@ def main():
 
     # 5. Scenario: Panic Mode (Watchdog Reset)
     print("\n[Scenario: Injecting Corruption (Panic Mode Test)]")
-    os_kernel.step(">NEU:UPDATE #ctx7 !9 | corruption=0.95")
+    # v10 update: Ensuring metadata is a JSON-compatible string for neurostate
+    os_kernel.step('>NEU:WRITE #ctx7 !9 | data={"calm": 0.05, "corruption": 0.95}')
     # Next step should trigger Watchdog IRQ before executing
     os_kernel.step(">MEM:LS #ctx0 !1")
     
