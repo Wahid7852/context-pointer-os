@@ -262,7 +262,7 @@ class Scheduler:
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
-        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth"]:
+        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
         if status == "ok":
             if instr.action == "load":
@@ -313,6 +313,22 @@ class Scheduler:
                         c_id = instr.target_id
                         c_obj = ContextObject(id=c_id, type="concept", title="Synthesized Concept", summary="Distilled knowledge", data="\n".join([str(o.data) for o in v_objs]), trust_score=sum(o.trust_score for o in v_objs)/len(v_objs))
                         self.registry.register(c_obj); self.store.load(c_id); result = f"Synth complete: {c_id}"
+            elif instr.action == "swarm":
+                # [CPOS v4.0] Swarm Intelligence: Distributed Task Execution
+                nodes_match = re.search(r'nodes="([^"]+)"', instr.metadata or "")
+                task_match = re.search(r'task="([^"]+)"', instr.metadata or "")
+                if nodes_match and task_match:
+                    nodes = [s.strip() for s in nodes_match.group(1).split(",")]
+                    task = task_match.group(1)
+                    swarm_results = []
+                    print(f"--- [SWARM] Dispatching collective task: {task} ---")
+                    for node_id in nodes:
+                        node_obj = self.registry.get(node_id)
+                        if node_obj:
+                            sim_result = f"[{node_id}] Analysis: {task[:20]}... - OK (Simulated by {node_obj.title})"
+                            swarm_results.append(sim_result)
+                    result = "\n".join(swarm_results)
+                else: status = "error"; result = "ERR_INVALID_SWARM_CONFIG"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; self.store.load(b.id); result = f"Branched: {b.id}"

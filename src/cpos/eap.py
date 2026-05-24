@@ -39,6 +39,7 @@ class EAPParser:
         'EXCHANGE': 'exchange',
         'FUSE': 'fuse',
         'SYNTH': 'synth',
+        'SWARM': 'swarm',
         'GC': 'gc',
         'LS': 'ls',
         'PS': 'ps',

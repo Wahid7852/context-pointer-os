@@ -47,6 +47,7 @@ class AITCodec:
         'e': 'exchange',
         '8': 'fuse',
         '9': 'synth',
+        '7': 'swarm',
         'v': 'device',
         'k': 'lock',
         'n': 'unlock'
