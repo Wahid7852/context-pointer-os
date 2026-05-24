@@ -121,4 +121,4 @@ pytest tests/
 - **v0.5**: Predictive Scheduling (Neural prefetching).
 
 ---
-MIT License | Developed by **kagioneko**
+MIT License | Developed by **kagioneko** (The Architect) & **Gemini CLI** (The Mind)
