@@ -50,6 +50,7 @@ class AITCodec:
         '7': 'swarm',
         'd': 'consensus',
         '4': 'reincarnate',
+        '5': 'exec',
         'v': 'device',
         'k': 'lock',
         'n': 'unlock'

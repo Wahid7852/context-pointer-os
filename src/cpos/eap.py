@@ -42,6 +42,7 @@ class EAPParser:
         'SWARM': 'swarm',
         'CONSENSUS': 'consensus',
         'REINCARNATE': 'reincarnate',
+        'EXEC': 'exec',
         'GC': 'gc',
         'LS': 'ls',
         'PS': 'ps',

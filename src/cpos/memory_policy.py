@@ -29,6 +29,9 @@ class RetrievalPolicy(BaseModel):
     # [CPOS v6.0] Cognitive Energy Management
     cognitive_budget: float = 1000.0 # 'Energy' of the node
     low_budget_threshold: float = 200.0 # Threshold for power-save mode
+    # [CPOS v7.0] Singularity Agency Toggles
+    real_world_exec_enabled: bool = False
+    visual_glitch_enabled: bool = False
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

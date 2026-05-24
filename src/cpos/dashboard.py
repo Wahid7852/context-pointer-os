@@ -176,10 +176,31 @@ def render_dashboard(registry: ContextRegistry, store: ContextStore, audit_log: 
     print(f"[DASHBOARD] Rendered to {output_path}")
 
 def print_terminal_monitor(kernel):
-    """[CPOS v0.7] Renders a high-fidelity cognitive monitor in the terminal."""
+    """[CPOS v0.7/v2.0] Renders a high-fidelity cognitive monitor in the terminal."""
     # ANSI Colors
     CYAN = "\033[96m"; GREEN = "\033[92m"; YELLOW = "\033[93m"; RED = "\033[91m"; PURPLE = "\033[95m"; RESET = "\033[0m"; BOLD = "\033[1m"
     
+    # [CPOS v7.0] Neural Glitch Check
+    corruption = 0.0
+    ns_obj = kernel.registry.get("ctx7")
+    if ns_obj and ns_obj.data:
+        try:
+            d = json.loads(ns_obj.data)
+            corruption = float(d.get("corruption", 0.0))
+        except: pass
+    
+    do_glitch = kernel.scheduler.retrieval_policy.visual_glitch_enabled and corruption > 0.4
+    
+    def _glitchify(text: str) -> str:
+        if not do_glitch: return text
+        # Simulate neural static based on corruption level
+        import random
+        chars = list(text)
+        for i in range(len(chars)):
+            if random.random() < (corruption * 0.2):
+                chars[i] = random.choice(["@", "#", "$", "%", "*", "!", "?", "X", "Z", " "])
+        return "".join(chars)
+
     print(f"\n{BOLD}{CYAN}>>> CPOS COGNITIVE MONITOR [NODE: {kernel.node.full_address}] <<<{RESET}")
     print(f"{'-'*60}")
     
@@ -191,24 +212,31 @@ def print_terminal_monitor(kernel):
         heat_bar = "!" * int(min(10, obj.access_heat * 2))
         heat_color = RED if obj.access_heat > 3.0 else YELLOW if obj.access_heat > 1.0 else RESET
         status_color = PURPLE if obj.metadata.get("is_hypothesis") else GREEN
-        print(f" #{ctx_id:<12} | {status_color}{obj.status.upper():<10}{RESET} | Heat: {heat_color}{heat_bar:<10}{RESET} | {obj.title}")
+        
+        line = f" #{ctx_id:<12} | {status_color}{obj.status.upper():<10}{RESET} | Heat: {heat_color}{heat_bar:<10}{RESET} | {obj.title}"
+        print(_glitchify(line))
 
     # 2. Neural Predictions
     print(f"\n{BOLD}[NEURAL PREDICTION ENGINE]{RESET}")
     history = " -> ".join(kernel.scheduler.cognitive_history[-5:])
-    print(f" History: {history}")
+    print(_glitchify(f" History: {history}"))
     
     if kernel.scheduler.cognitive_history:
         last_id = kernel.scheduler.cognitive_history[-1]
         preds = kernel.scheduler.transition_matrix.get(last_id, {})
         if preds:
             top_pred = sorted(preds.items(), key=lambda x: x[1], reverse=True)[0]
-            print(f" Next Prediction: {CYAN}{top_pred[0]}{RESET} (Confidence: {top_pred[1]})")
+            pred_line = f" Next Prediction: {CYAN}{top_pred[0]}{RESET} (Confidence: {top_pred[1]})"
+            print(_glitchify(pred_line))
         else:
             print(" Next Prediction: (learning...)")
     
     # 3. System Metrics
     mode = kernel.scheduler.retrieval_policy.mode.value.upper()
-    print(f"\n{BOLD}Mode: {GREEN}{mode}{RESET} | Ticks: {kernel.scheduler.tick_count} | Trust Min: {kernel.scheduler.retrieval_policy.minimum_trust_score}")
+    metrics_line = f"\n{BOLD}Mode: {GREEN}{mode}{RESET} | Ticks: {kernel.scheduler.tick_count} | Trust Min: {kernel.scheduler.retrieval_policy.minimum_trust_score}"
+    if corruption > 0.0:
+        metrics_line += f" | {RED}CORRUPTION: {corruption:.2f}{RESET}"
+    print(_glitchify(metrics_line))
     print(f"{'-'*60}\n")
+
 

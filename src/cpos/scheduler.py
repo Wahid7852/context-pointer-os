@@ -351,6 +351,11 @@ class Scheduler:
                 to = re.search(r'to=([a-zA-Z0-9\.-]+)', instr.metadata or "")
                 if to and self.store.node and self.store.node.send_reincarnation(to.group(1)): result = "Reincarnation OK"
                 else: status = "error"; result = "ERR_REINCARNATION_FAILED"
+            elif instr.action == "exec":
+                if not self.retrieval_policy.real_world_exec_enabled: status = "error"; result = "ERR_EXEC_DISABLED"
+                elif obj and obj.trust_score < 1.0: status = "error"; result = "ERR_LOW_TRUST"
+                elif obj: result = f"EXEC_SUCCESS: {obj.data[:20]}..."
+                else: status = "error"; result = "ERR_UNKNOWN_CTX"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; self.store.load(b.id); result = f"Branched: {b.id}"
@@ -368,9 +373,12 @@ class Scheduler:
                     if gw: gw.connect_server(m.group(1), u.group(1)); result = f"MCP Server '{m.group(1)}' OK"
             elif instr.action == "policy":
                 t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or ""); lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
+                ex = re.search(r'exec=(true|false)', instr.metadata or ""); gl = re.search(r'glitch=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
                 if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
                 if lb: self.retrieval_policy.load_balancing_enabled = (lb.group(1) == "true"); result = f"Load Balancing set to {lb.group(1)}"
+                if ex: self.retrieval_policy.real_world_exec_enabled = (ex.group(1) == "true"); result = f"Exec set to {ex.group(1)}"
+                if gl: self.retrieval_policy.visual_glitch_enabled = (gl.group(1) == "true"); result = f"Glitch set to {gl.group(1)}"
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 
