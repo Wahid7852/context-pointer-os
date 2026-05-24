@@ -21,6 +21,8 @@ class RetrievalPolicy(BaseModel):
     max_sensitivity_allowed: Literal["public", "internal", "private", "restricted"] = "internal"
     # [CPOS v0.5] Global Cognitive Mode
     mode: CognitiveMode = CognitiveMode.NORMAL
+    # [CPOS v4.0] Cognitive Dreaming Toggle
+    dreaming_enabled: bool = False
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

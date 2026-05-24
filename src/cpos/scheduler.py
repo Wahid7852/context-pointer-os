@@ -21,9 +21,7 @@ class JournalIntegrity:
         self.last_hash = "0" * 64
 
     def sign(self, entry: dict) -> str:
-        # Create a canonical string representation
         content = json.dumps(entry, sort_keys=True)
-        # Chain with previous hash
         chain_input = f"{self.last_hash}|{content}".encode()
         current_hash = hmac.new(self.secret_key, chain_input, hashlib.sha256).hexdigest()
         self.last_hash = current_hash
@@ -38,8 +36,7 @@ class JournalIntegrity:
             content = json.dumps(e, sort_keys=True)
             chain_input = f"{temp_last_hash}|{content}".encode()
             expected_hash = hmac.new(self.secret_key, chain_input, hashlib.sha256).hexdigest()
-            if sig != expected_hash:
-                return False
+            if sig != expected_hash: return False
             temp_last_hash = sig
         return True
 
@@ -104,12 +101,11 @@ class Scheduler:
         self.approvals = ApprovalStore()
         self.approval_policy = ApprovalPolicy()
         self.retrieval_policy = RetrievalPolicy()
-        # [CPOS v3.0] Cognitive Synthesis & Auditor
+        # [CPOS v3.0+] Cognitive Synthesis & Auditor & Dreaming
         self.cognitive_history: List[str] = []
         self.transition_matrix: Dict[str, Dict[str, int]] = {}
         self.current_persona: Optional[str] = None
         self.auditor_alerts: List[str] = [] 
-        # Initialize Journal Integrity with Kernel Key
         self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
 
     def set_agent(self, agent_name: str, pid: int = 0):
@@ -121,28 +117,22 @@ class Scheduler:
         output = []
         role = self.acl.get_role(self.current_agent)
         if self.current_agent == "root": role = Role.ROOT
-        
         SENSITIVITY_RANK = {"public": 0, "internal": 1, "private": 2, "restricted": 3}
         max_allowed_rank = SENSITIVITY_RANK.get(self.retrieval_policy.max_sensitivity_allowed, 1)
         if role == Role.ROOT: max_allowed_rank = 3
-
         eligible_contexts = []
         for ctx_id, obj in self.store.active_contexts.items():
             if obj.type not in self.retrieval_policy.allowed_context_types and role != Role.ROOT: continue
             if not self.acl.check(self.current_agent, obj.id, obj.type): continue
             eligible_contexts.append(obj)
-
         eligible_contexts.sort(key=lambda x: (x.trust_score * 0.6 + x.importance * 0.4), reverse=True)
-        active_ids = {obj.id for obj in eligible_contexts}
-        conflicts = []
-
+        active_ids = {obj.id for obj in eligible_contexts}; conflicts = []
         for obj in eligible_contexts:
             if obj.parent and obj.parent in active_ids:
-                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active. Information may overlap.")
+                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active.")
             if obj.trust_score < self.retrieval_policy.minimum_trust_score and role != Role.ROOT:
                 output.append(f"[{obj.id}: {obj.title}] (Status: {obj.status})\n[FILTERED] Trust Score {obj.trust_score} below threshold.")
                 continue
-
             obj_rank = SENSITIVITY_RANK.get(obj.sensitivity_level, 1)
             header = f"[{obj.id}: {obj.title}]"
             meta = f"Type: {obj.type} | Trust: {obj.trust_score:.2f} | Source: {obj.source} | Status: {obj.status}"
@@ -154,9 +144,7 @@ class Scheduler:
                 elif role == Role.GUEST and obj.type in ["persona", "neurostate"]: d = "[REDACTED: Restricted]"
                 content += f"\nDATA: {d}"
             output.append(content)
-            if self.retrieval_policy.audit_required:
-                self.registry._log_event("context_retrieval", obj.id, {"agent": self.current_agent, "role": str(role)})
-
+            if self.retrieval_policy.audit_required: self.registry._log_event("context_retrieval", obj.id, {"agent": self.current_agent, "role": str(role)})
         final_output = "\n\n".join(output)
         if self.current_persona: final_output = f"--- ACTIVE PERSONA: {self.current_persona} ---\n\n" + final_output
         if self.auditor_alerts: final_output = "--- KERNEL AUDITOR ALERTS ---\n" + "\n".join(self.auditor_alerts) + "\n\n" + final_output
@@ -173,17 +161,16 @@ class Scheduler:
         except: return False
 
     def dispatch(self, instruction_input: str):
-        now = time.time()
-        self.tick_count += 1
-        # [CPOS v3.0] Memory Audit
+        now = time.time(); self.tick_count += 1
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
+        # [CPOS v4.0] Dreaming
+        if self.retrieval_policy.dreaming_enabled: self.dream()
 
         for obj in self.registry.registry.values():
             last = getattr(obj, 'last_accessed', now)
             if now - last > 1.0: obj.access_heat = max(0.0, obj.access_heat - ((now - last) * 0.1))
             if obj.status == "active" and obj.access_heat < 0.1 and self.tick_count % 10 == 0:
-                obj.status = "stale"
-                self.registry._log_event("lifecycle_decay", obj.id, {"from": "active", "to": "stale"})
+                obj.status = "stale"; self.registry._log_event("lifecycle_decay", obj.id, {"from": "active", "to": "stale"})
             obj.last_accessed = now
 
         if self.retrieval_policy.mode == CognitiveMode.AUTONOMOUS: self._auto_validate()
@@ -191,18 +178,15 @@ class Scheduler:
             bq = []
             for i in self.task_queue: bq.append(i._replace(priority=min(9, i.priority + 1)))
             self.task_queue = bq
-
         ns_obj = self.registry.get("ctx7")
         if ns_obj and ns_obj.data:
             try:
                 if float(json.loads(ns_obj.data).get("corruption", 0)) > 0.8:
                     self.interrupt_queue.append(AITInstruction("neurostate", "ctx7", "write", 9, '{"calm": 0.5, "corruption": 0.0}'))
             except: pass
-
         while self.interrupt_queue:
             self.interrupt_queue.sort(key=lambda x: x.priority, reverse=True)
             self.execute(self.interrupt_queue.pop(0), is_interrupt=True)
-
         instr = EAPParser.parse(instruction_input) if instruction_input.startswith('>') else AITCodec.decode(instruction_input)
         if not instr: return {"status": "error", "code": "ERR_UNKNOWN_INSTRUCTION"}
         self.task_queue.append(instr)
@@ -212,8 +196,7 @@ class Scheduler:
     def _auto_validate(self):
         for obj in self.registry.registry.values():
             if obj.status == "stale" and obj.source and (obj.source.startswith("github_api") or obj.source == "external_db"):
-                obj.status = "active"
-                obj.trust_score = min(1.0, obj.trust_score + 0.05)
+                obj.status = "active"; obj.trust_score = min(1.0, obj.trust_score + 0.05)
                 self.registry._log_event("auto_validation", obj.id, {"status": "restored"})
 
     def _prefetch(self, target_id: str):
@@ -233,22 +216,34 @@ class Scheduler:
             if cid not in self.store.active_contexts and cid != target_id: self.store.load(cid, priority=1)
 
     def _audit_memory_consistency(self):
-        """[CPOS v3.0] Kernel Auditor: Detects logical contradictions in memory."""
         self.auditor_alerts = []
         active = list(self.store.active_contexts.values())
         for i, obj_a in enumerate(active):
             for obj_b in active[i+1:]:
-                # Heuristic: Topic-based dissonance
                 if obj_a.id.split('.')[0] == obj_b.id.split('.')[0] and obj_a.id != obj_b.id:
                     if abs(obj_a.trust_score - obj_b.trust_score) > 0.4:
-                        self.auditor_alerts.append(f"COGNITIVE DISSONANCE: {obj_a.id} vs {obj_b.id}. High trust gap.")
+                        self.auditor_alerts.append(f"COGNITIVE DISSONANCE: {obj_a.id} vs {obj_b.id}.")
         for obj in active:
             if obj.status == "stale": self.auditor_alerts.append(f"OUTDATED INFO: {obj.id} is stale.")
+
+    def dream(self):
+        """[CPOS v4.0] Background cognitive optimization."""
+        # 1. Consolidation
+        fused = [obj for obj in self.registry.registry.values() if obj.id.startswith("fused_") and obj.status != "deleted"]
+        if len(fused) > 5:
+            fused.sort(key=lambda x: x.access_heat)
+            for o in fused[:2]:
+                print(f"--- [DREAM] Consolidating fusion: {o.id} ---")
+                o.status = "deleted"; self.store.unload(o.id)
+        # 2. Re-validation of failed hypotheses
+        rollbacks = [obj for obj in self.registry.registry.values() if obj.status == "deleted" and getattr(obj, 'invalidated_reason', '') == "rollback"]
+        if rollbacks and self.tick_count % 20 == 0:
+            c = rollbacks[0]; print(f"--- [DREAM] Reviving hypothesis: {c.id} ---")
+            c.status = "active"; c.trust_score = min(1.0, c.trust_score + 0.01); c.invalidated_reason = None
 
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
-        
         if instr.action == "load":
             if self.cognitive_history:
                 prev = self.cognitive_history[-1]
@@ -257,7 +252,6 @@ class Scheduler:
                     self.transition_matrix[prev][instr.target_id] = self.transition_matrix[prev].get(instr.target_id, 0) + 1
             self.cognitive_history.append(instr.target_id)
             if len(self.cognitive_history) > 20: self.cognitive_history.pop(0)
-
         meta, violations = PayloadSanitizer.sanitize(instr.action, instr.metadata)
         if violations:
             instr = instr._replace(metadata=meta)
@@ -265,13 +259,11 @@ class Scheduler:
                 req_id = self.approvals.request(self.current_agent, instr, "Security Violations")
                 status = "awaiting_approval"; result = f"Gated: {req_id}"; self._log_audit(instr, status, result, effective_priority)
                 return {"status": status, "result": result, "request_id": req_id}
-
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
         elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
-
         if status == "ok":
             if instr.action == "load":
                 if not self.store.load(instr.target_id, effective_priority): status = "error"; result = "ERR_LOAD_FAILED"
@@ -279,7 +271,7 @@ class Scheduler:
                     if self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
                     if instr.domain == "persona": self.current_persona = instr.target_id; result = f"Persona set to {instr.target_id}"
             elif instr.action == "unload": 
-                self.store.unload(instr.target_id)
+                self.store.unload(instr.target_id); 
                 if self.current_persona == instr.target_id: self.current_persona = None
             elif instr.action == "query":
                 q = re.search(r'q="([^"]+)"', instr.metadata or "")
@@ -337,20 +329,18 @@ class Scheduler:
                 elif mcp and url and self.store.gateways:
                     mcp_gw = self.store.gateways.gateways.get("mcp")
                     if mcp_gw: mcp_gw.connect_server(mcp.group(1), url.group(1)); result = f"MCP Server '{mcp.group(1)}' OK"
+                else: status = "error"; result = "ERR_HANDSHAKE_OR_MCP_FAILED"
             elif instr.action == "policy":
-                t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or "")
+                t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
-
+                if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 
     def _log_audit(self, instr, status, result, effective_priority=None):
         p = effective_priority if effective_priority is not None else instr.priority
         c = AITCodec.encode(instr.domain, instr.target_id, instr.action, p)
-        entry = {
-            "time": datetime.now().isoformat(), "agent": self.current_agent, "pid": self.current_pid, 
-            "instr": c, "action": instr.action, "target": instr.target_id, "status": status, "result": str(result), "metadata": instr.metadata 
-        }
+        entry = {"time": datetime.now().isoformat(), "agent": self.current_agent, "pid": self.current_pid, "instr": c, "action": instr.action, "target": instr.target_id, "status": status, "result": str(result), "metadata": instr.metadata}
         entry["signature"] = self.journal_guard.sign(entry)
         self.audit_log.append(entry)
         if self.store.storage:
@@ -358,5 +348,4 @@ class Scheduler:
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             with open(log_path, "a") as f: f.write(json.dumps(entry) + "\n")
 
-    def verify_journal(self) -> bool:
-        return self.journal_guard.verify_chain(self.audit_log)
+    def verify_journal(self) -> bool: return self.journal_guard.verify_chain(self.audit_log)
