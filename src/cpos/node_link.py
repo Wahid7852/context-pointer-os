@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 from .registry import ContextObject
 
 class NodeLink:
-    """[CPOS v0.4] Inter-Node Communication Layer. Simulates distributed kernel connectivity."""
+    """[CPOS v0.4+] Inter-Node Communication Layer. Simulates distributed kernel connectivity."""
     
     def __init__(self, node_id: str, domain: str = "local"):
         self.node_id = node_id
@@ -15,6 +15,8 @@ class NodeLink:
         self.peers: Dict[str, 'NodeLink'] = {}
         # [CPOS v0.4] Authenticated peers: address -> bool
         self.auth_nodes: Dict[str, bool] = {}
+        # [CPOS v5.0] Peer Load tracking: address -> float (0.0 to 100.0)
+        self.peer_loads: Dict[str, float] = {}
         # Local Kernel reference (assigned by CPOS)
         self.kernel = None
 
@@ -32,23 +34,44 @@ class NodeLink:
         peer = self.peers[remote_addr]
         print(f"--- [AUTH] {self.full_address} initiating handshake with {remote_addr} ---")
         
-        # In a real system, this would be an encrypted challenge-response
-        success = peer._handle_handshake_request(self.full_address, key)
+        # [CPOS v5.0] Report local load during handshake
+        local_load = self._get_local_load()
+        success = peer._handle_handshake_request(self.full_address, key, local_load)
         if success:
             self.auth_nodes[remote_addr] = True
             print(f"--- [AUTH] {self.full_address} authenticated by {remote_addr} ---")
         return success
 
-    def _handle_handshake_request(self, requester_addr: str, key: str) -> bool:
+    def _handle_handshake_request(self, requester_addr: str, key: str, requester_load: float = 0.0) -> bool:
         """Verifies an incoming handshake request."""
         if not self.kernel: return False
         
         # Verify the key (Simulated: in this prototype, any key > 8 chars is 'ok')
         if key and len(key) > 8:
             self.auth_nodes[requester_addr] = True
-            print(f"--- [AUTH] {self.full_address} granted access to {requester_addr} ---")
+            self.peer_loads[requester_addr] = requester_load
+            print(f"--- [AUTH] {self.full_address} granted access to {requester_addr} (Load: {requester_load}%) ---")
             return True
         return False
+
+    def _get_local_load(self) -> float:
+        """Simulates fetching current node load from Environmental Gateway."""
+        if self.kernel and self.kernel.gateways:
+            obj = self.kernel.gateways.resolve("env", "system/cpu_load")
+            if obj and obj.data:
+                try:
+                    return float(obj.data.replace("CURRENT_VALUE: ", "").replace("%", ""))
+                except: pass
+        return 0.0
+
+    def get_least_loaded_peer(self) -> Optional[str]:
+        """[CPOS v5.0] Returns the address of the authenticated peer with the lowest load."""
+        auth_peers = [addr for addr, is_auth in self.auth_nodes.items() if is_auth]
+        if not auth_peers: return None
+        
+        # Sort by load
+        sorted_peers = sorted(auth_peers, key=lambda x: self.peer_loads.get(x, 100.0))
+        return sorted_peers[0]
 
     def fetch_remote_context(self, remote_addr: str, ctx_type: str, ctx_id: str) -> Optional[ContextObject]:
         """Fetches context metadata and data from a remote node. Requires handshake."""
@@ -83,7 +106,6 @@ class NodeLink:
         matches = self.kernel.registry.semantic_search(query, limit=2)
         results = []
         for obj, score in matches:
-            # Filter sensitivity (v4.0 Security Rule: only public/internal for remote query)
             if obj.sensitivity_level in ["public", "internal"]:
                 results.append({
                     "id": obj.id,
@@ -113,7 +135,7 @@ class NodeLink:
         if not obj.data and obj.content_ref:
             self.kernel.store.load(ctx_id)
         
-        # Check sensitivity (Deny private/restricted to remote nodes in this prototype)
+        # Check sensitivity
         if obj.sensitivity_level in ["private", "restricted"]:
             print(f"--- [SECURITY] Remote access denied for {requester_addr} to {ctx_id} ---")
             return None

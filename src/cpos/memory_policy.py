@@ -25,6 +25,7 @@ class RetrievalPolicy(BaseModel):
     dreaming_enabled: bool = False
     # [CPOS v5.0] Autonomic Evolution Toggle
     evolution_enabled: bool = True
+    load_balancing_enabled: bool = True
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

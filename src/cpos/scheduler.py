@@ -368,18 +368,29 @@ class Scheduler:
                         c_obj = ContextObject(id=c_id, type="concept", title="Synthesized Concept", summary="Distilled knowledge", data="\n".join([str(o.data) for o in v_objs]), trust_score=sum(o.trust_score for o in v_objs)/len(v_objs))
                         self.registry.register(c_obj); self.store.load(c_id); result = f"Synth complete: {c_id}"
             elif instr.action == "swarm":
-                # [CPOS v4.0] Swarm Intelligence: Distributed Task Execution
+                # [CPOS v4.0/v5.0] Swarm Intelligence with Load Balancing
                 nodes_match = re.search(r'nodes="([^"]+)"', instr.metadata or "")
                 task_match = re.search(r'task="([^"]+)"', instr.metadata or "")
                 if nodes_match and task_match:
                     nodes = [s.strip() for s in nodes_match.group(1).split(",")]
                     task = task_match.group(1)
                     swarm_results = []
+                    
+                    # [CPOS v5.0] Cognitive Load Balancing
+                    target_label = "LOCAL"
+                    if self.retrieval_policy.load_balancing_enabled and self.store.node:
+                        local_load = self.store.node._get_local_load()
+                        if local_load > 70.0:
+                            least_loaded = self.store.node.get_least_loaded_peer()
+                            if least_loaded:
+                                print(f"--- [BALANCER] Local load high ({local_load}%). Redirecting to {least_loaded} ---")
+                                target_label = f"REMOTE[{least_loaded}]"
+
                     print(f"--- [SWARM] Dispatching collective task: {task} ---")
                     for node_id in nodes:
                         node_obj = self.registry.get(node_id)
                         if node_obj:
-                            sim_result = f"[{node_id}] Analysis: {task[:20]}... - OK (Simulated by {node_obj.title})"
+                            sim_result = f"[{target_label} -> {node_id}] Analysis: {task[:20]}... - OK"
                             swarm_results.append(sim_result)
                     result = "\n".join(swarm_results)
                 else: status = "error"; result = "ERR_INVALID_SWARM_CONFIG"
@@ -402,8 +413,10 @@ class Scheduler:
                 else: status = "error"; result = "ERR_HANDSHAKE_OR_MCP_FAILED"
             elif instr.action == "policy":
                 t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or "")
+                lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
                 if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
+                if lb: self.retrieval_policy.load_balancing_enabled = (lb.group(1) == "true"); result = f"Load Balancing set to {lb.group(1)}"
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 
