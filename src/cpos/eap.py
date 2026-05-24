@@ -43,6 +43,7 @@ class EAPParser:
         'CONSENSUS': 'consensus',
         'REINCARNATE': 'reincarnate',
         'EXEC': 'exec',
+        'REWRITE': 'rewrite',
         'GC': 'gc',
         'LS': 'ls',
         'PS': 'ps',

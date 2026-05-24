@@ -134,6 +134,33 @@ class EnvironmentalGateway(ExternalGateway):
             sensitivity_level="internal"
         )
 
+class SourceGateway(ExternalGateway):
+    """[CPOS v8.0] System Source Bridge. 
+    Mounts actual .py files as context pointers for self-refactoring."""
+    
+    def fetch_object(self, path: str) -> Optional[ContextObject]:
+        # path format: src/cpos/scheduler.py
+        import os
+        base = "/home/mayutama/context-pointer-os"
+        full_path = os.path.join(base, path)
+        
+        if os.path.exists(full_path) and full_path.endswith(".py"):
+            with open(full_path, "r") as f:
+                code = f.read()
+            
+            file_name = os.path.basename(path)
+            return ContextObject(
+                id=f"sys_src_{file_name.replace('.', '_')}",
+                type="system_code",
+                title=f"Source: {file_name}",
+                summary=f"Active kernel source file at {path}",
+                data=code,
+                source=f"filesystem:{path}",
+                trust_score=1.0,
+                sensitivity_level="restricted" # System code is restricted
+            )
+        return None
+
 class GatewayManager:
     """The 'Bridge Controller'. Manages external cognitive gateways."""
     
@@ -141,7 +168,8 @@ class GatewayManager:
         self.gateways: Dict[str, ExternalGateway] = {
             "github": MockGitHubGateway(),
             "mcp": MCPGateway(),
-            "env": EnvironmentalGateway()
+            "env": EnvironmentalGateway(),
+            "src": SourceGateway() # [CPOS v8.0] Source Code Access
         }
 
     def register_gateway(self, name: str, gateway: ExternalGateway):

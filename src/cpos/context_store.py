@@ -64,6 +64,19 @@ class ContextStore:
                         print(f"--- [STORE ERROR] Failed to resolve external context {ctx_id} ---")
                         return False
                 
+                # [CPOS v8.0] Genetic Kernel: Source Code Support
+                # Format: ptr://src.<path_to_file>
+                elif ctx_id.startswith("ptr://src.") and self.gateways:
+                    path = ctx_id[10:]
+                    remote_obj = self.gateways.resolve("src", path)
+                    if remote_obj:
+                        self.registry.register(remote_obj)
+                        ctx_id = remote_obj.id
+                        print(f"--- [STORE] System source {ctx_id} mounted ---")
+                    else:
+                        print(f"--- [STORE ERROR] Failed to mount system source {ctx_id} ---")
+                        return False
+
                 # Format: ptr://node_addr/type/id (Kernel-to-Kernel)
                 elif self.node:
                     parts = ctx_id[6:].split("/")

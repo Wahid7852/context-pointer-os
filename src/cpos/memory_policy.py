@@ -32,6 +32,8 @@ class RetrievalPolicy(BaseModel):
     # [CPOS v7.0] Singularity Agency Toggles
     real_world_exec_enabled: bool = False
     visual_glitch_enabled: bool = False
+    # [CPOS v8.0] Genetic Kernel Toggle
+    self_modification_enabled: bool = False
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

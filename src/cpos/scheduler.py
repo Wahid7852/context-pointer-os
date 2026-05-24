@@ -283,7 +283,7 @@ class Scheduler:
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
-        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm", "consensus", "reincarnate"]:
+        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm", "consensus", "reincarnate", "exec", "rewrite"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
         if status == "ok":
             if instr.action == "load":
@@ -356,6 +356,17 @@ class Scheduler:
                 elif obj and obj.trust_score < 1.0: status = "error"; result = "ERR_LOW_TRUST"
                 elif obj: result = f"EXEC_SUCCESS: {obj.data[:20]}..."
                 else: status = "error"; result = "ERR_UNKNOWN_CTX"
+            elif instr.action == "rewrite":
+                if not self.retrieval_policy.self_modification_enabled: status = "error"; result = "ERR_SELF_MOD_DISABLED"
+                elif obj and obj.trust_score < 1.0: status = "error"; result = "ERR_LOW_TRUST"
+                elif obj and obj.type == "system_code":
+                    try:
+                        fp = obj.source.replace("filesystem:", "")
+                        full_fp = os.path.join("/home/mayutama/context-pointer-os", fp)
+                        with open(full_fp, "w") as f: f.write(obj.data)
+                        result = f"DNA Rewrite Success: {fp}"
+                    except Exception as e: status = "error"; result = f"REWRITE_FAILED: {str(e)}"
+                else: status = "error"; result = "ERR_NOT_SYSTEM_CODE"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; self.store.load(b.id); result = f"Branched: {b.id}"
@@ -374,11 +385,13 @@ class Scheduler:
             elif instr.action == "policy":
                 t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or ""); lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
                 ex = re.search(r'exec=(true|false)', instr.metadata or ""); gl = re.search(r'glitch=(true|false)', instr.metadata or "")
+                sm = re.search(r'self_mod=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
                 if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
                 if lb: self.retrieval_policy.load_balancing_enabled = (lb.group(1) == "true"); result = f"Load Balancing set to {lb.group(1)}"
                 if ex: self.retrieval_policy.real_world_exec_enabled = (ex.group(1) == "true"); result = f"Exec set to {ex.group(1)}"
                 if gl: self.retrieval_policy.visual_glitch_enabled = (gl.group(1) == "true"); result = f"Glitch set to {gl.group(1)}"
+                if sm: self.retrieval_policy.self_modification_enabled = (sm.group(1) == "true"); result = f"Self-Mod set to {sm.group(1)}"
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 
