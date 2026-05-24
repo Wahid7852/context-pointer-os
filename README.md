@@ -2,21 +2,33 @@
 
 > **"LLM agents don't need bigger memory. They need a cognitive memory kernel."**
 
+**CPOS treats the LLM context window as working memory (RAM) and external storage as long-term memory (Disk).**
+
 Context Pointer OS (CPOS) is a specialized memory management layer for long-running LLM agents. Instead of overfilling the context window with conversation history, CPOS introduces **Context Pointers** (#ctx) to dynamically mount, swap, and protect information, functioning as a **virtual memory layer for long-context LLM agents**.
+
+---
+
+## ❓ Why CPOS?
+
+| Traditional RAG | Context Pointer OS (CPOS) |
+| :--- | :--- |
+| **Stateless**: Constant repeated retrieval | **Stateful**: Managed memory registry |
+| **Prompt Bloat**: Dumping raw text into context | **Context Pointers**: Lightweight references |
+| **Fragmented**: Memory is separate from logic | **Integrated**: Runtime-managed paging & ACL |
 
 ---
 
 ## 🗺️ System Architecture
 
 ```text
-       [ LLM Prompt (Active Context) ]
+       [ LLM Prompt (Active Context / RAM) ]
                     ↑
              Context Pointers (#ctx)
                     ↑
        [ CPOS Kernel (Memory Registry) ]
           /         |          \
  [Local Disk]  [Vector DB]  [MCP Servers]
-     (Swap)      (Search)     (External)
+    (Swap)       (Search)     (External)
 ```
 
 ---
@@ -54,7 +66,7 @@ System Status after Watchdog IRQ: Stable (corruption=0.0)
 ## 🧠 Core Architecture (v0.1 Implemented)
 
 ### 📂 Context Pointers (#ctx)
-Pointers are lightweight references to memory. They allow the agent to keep its prompt clean while retaining the ability to "recall" specific data on demand via the Registry.
+Pointers are lightweight references to memory. They allow the agent to keep its prompt space clean while retaining the ability to "recall" specific data on demand via the Registry.
 
 ### 💾 Cognitive RAM & Paging
 - **Active Contexts**: Only specific pointers occupy the LLM's immediate prompt space.
