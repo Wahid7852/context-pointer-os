@@ -75,7 +75,7 @@ Pointers are lightweight references to memory. They allow the agent to keep its 
 - **Homeostasis**: The kernel automatically summarizes or swaps unused pointers to disk when context limits are reached.
 
 ### 🧪 Speculative Branching
-Supports creating isolated context "branches" to test hypotheses safely. Changes in a branch do not affect the main memory until explicitly **COMMITTED**, allowing for complex trial-and-error reasoning.
+Inspired by **speculative execution** and **transactional memory systems**, CPOS supports creating isolated context "branches" to test hypotheses safely. Changes in a branch do not affect the main memory until explicitly **COMMITTED** or **ROLLED BACK**, allowing for complex trial-and-error reasoning without corrupting the core state.
 
 ### 📊 Runtime Monitoring & Watchdog
 Real-time monitoring of agent "stability" metrics. The **Kernel Watchdog** can trigger hardware-level interrupts (IRQ) to reset the agent or clear corrupted context if internal health scores exceed safety thresholds.

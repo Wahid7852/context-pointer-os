@@ -49,7 +49,22 @@ Context Pointer OS (CPOS) は、LLMエージェントが長期的な文脈を効
 
 ---
 
-## 5. 設計思想
+## 6. Memory Transaction Lifecycle (Speculative Branching)
+
+CPOS implements a transactional model for memory updates, inspired by **Software Transactional Memory (STM)**. This allows agents to explore multiple reasoning paths safely.
+
+| Stage | Operation | Description |
+| :--- | :--- | :--- |
+| **BEGIN** | `FORK` / `BRANCH` | Creates an isolated child pointer with a low initial `trust_score`. |
+| **WORK** | `WRITE` / `UPDATE` | Modifications are applied only to the isolated branch pointer. |
+| **VALIDATE** | Internal Audit | The agent or kernel checks for logical consistency and performance. |
+| **COMMIT** | `COMMIT` / `MERGE` | Branch data is atomically written back to the parent. `trust_score` increases. |
+| **ROLLBACK** | `ROLLBACK` / `FORGET`| Discards the branch entirely, leaving the parent state untouched. |
+
+---
+
+## 7. 設計思想
 
 CPOSは、AIに「巨大な記憶」を与えるのではない。
 AIに **「どの記憶を、いつ、なぜ、どこまで使うか」という意思決定のメタ構造** を提供するものである。
+
