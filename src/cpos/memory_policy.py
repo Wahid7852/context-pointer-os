@@ -23,6 +23,8 @@ class RetrievalPolicy(BaseModel):
     mode: CognitiveMode = CognitiveMode.NORMAL
     # [CPOS v4.0] Cognitive Dreaming Toggle
     dreaming_enabled: bool = False
+    # [CPOS v5.0] Autonomic Evolution Toggle
+    evolution_enabled: bool = True
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

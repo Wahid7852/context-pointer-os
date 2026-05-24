@@ -165,6 +165,8 @@ class Scheduler:
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
         # [CPOS v4.0] Dreaming
         if self.retrieval_policy.dreaming_enabled: self.dream()
+        # [CPOS v5.0] Autonomic Evolution
+        if self.retrieval_policy.evolution_enabled and self.tick_count % 15 == 0: self.evolve()
 
         for obj in self.registry.registry.values():
             last = getattr(obj, 'last_accessed', now)
@@ -240,6 +242,32 @@ class Scheduler:
         if rollbacks and self.tick_count % 20 == 0:
             c = rollbacks[0]; print(f"--- [DREAM] Reviving hypothesis: {c.id} ---")
             c.status = "active"; c.trust_score = min(1.0, c.trust_score + 0.01); c.invalidated_reason = None
+
+    def evolve(self):
+        """[CPOS v5.0] Autonomic Evolution: Self-synthesizing new specialized personas."""
+        print("--- [EVOLUTION] Analyzing cognitive patterns for growth ---")
+        # Pattern Detection: Find pairs of personas used in sequence frequently
+        for prev_id, next_map in self.transition_matrix.items():
+            for next_id, freq in next_map.items():
+                if freq >= 3: # Pattern detected
+                    p1 = self.registry.get(prev_id)
+                    p2 = self.registry.get(next_id)
+                    if p1 and p2 and p1.type == "persona" and p2.type == "persona":
+                        fused_id = f"auto_expert_{p1.id}_{p2.id}"[:32]
+                        if fused_id not in self.registry.registry:
+                            print(f"--- [EVOLUTION] Significant pattern detected ({p1.id} -> {p2.id}). Synthesizing new Expert: {fused_id} ---")
+                            # Self-directed Fusion
+                            f_obj = ContextObject(
+                                id=fused_id, 
+                                type="persona", 
+                                title=f"Autonomic Expert ({p1.title} + {p2.title})", 
+                                summary=f"Machine-synthesized expert based on frequent task transitions.", 
+                                data=f"SYNERGY CONTEXT:\n{p1.data}\n{p2.data}",
+                                trust_score=0.9, # High trust for evolved concepts
+                                source="kernel_evolution"
+                            )
+                            self.registry.register(f_obj)
+                            self.registry._log_event("autonomic_evolution", fused_id, {"pattern": [p1.id, p2.id]})
 
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
