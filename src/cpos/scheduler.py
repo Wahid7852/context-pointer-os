@@ -131,14 +131,13 @@ class Scheduler:
             if not self.acl.check(self.current_agent, obj.id, obj.type): continue
             eligible_contexts.append(obj)
 
-        # Prioritize
         eligible_contexts.sort(key=lambda x: (x.trust_score * 0.6 + x.importance * 0.4), reverse=True)
         active_ids = {obj.id for obj in eligible_contexts}
         conflicts = []
 
         for obj in eligible_contexts:
             if obj.parent and obj.parent in active_ids:
-                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active. Information may overlap.")
+                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active.")
             
             if obj.trust_score < self.retrieval_policy.minimum_trust_score and role != Role.ROOT:
                 output.append(f"[{obj.id}: {obj.title}] (Status: {obj.status})\n[FILTERED] Trust Score {obj.trust_score} below threshold.")
@@ -153,9 +152,9 @@ class Scheduler:
             if obj.data:
                 d = obj.data
                 if obj_rank > max_allowed_rank:
-                    d = f"[REDACTED: Sensitivity Level '{obj.sensitivity_level}' exceeds current policy]"
+                    d = f"[REDACTED: Sensitivity exceeds current policy]"
                 elif role == Role.GUEST and obj.type in ["persona", "neurostate"]:
-                    d = "[REDACTED: Restricted to Guest Role]"
+                    d = "[REDACTED: Restricted]"
                 content += f"\nDATA: {d}"
             output.append(content)
             
@@ -179,13 +178,10 @@ class Scheduler:
 
     def dispatch(self, instruction_input: str):
         now = time.time(); self.tick_count += 1
-        
-        # Periodic Tasks
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
         if self.retrieval_policy.dreaming_enabled: self.dream()
         if self.retrieval_policy.evolution_enabled and self.tick_count % 15 == 0: self.evolve()
 
-        # Heat Decay & Auto-Staling
         for obj in self.registry.registry.values():
             last = getattr(obj, 'last_accessed', now)
             if now - last > 1.0: obj.access_heat = max(0.0, obj.access_heat - ((now - last) * 0.1))
@@ -194,12 +190,9 @@ class Scheduler:
             obj.last_accessed = now
 
         if self.retrieval_policy.mode == CognitiveMode.AUTONOMOUS: self._auto_validate()
-        
-        # Priority Boosting
         if self.tick_count % 5 == 0:
             self.task_queue = [i._replace(priority=min(9, i.priority + 1)) for i in self.task_queue]
 
-        # Watchdog IRQ
         ns_obj = self.registry.get("ctx7")
         if ns_obj and ns_obj.data:
             try:
@@ -274,7 +267,7 @@ class Scheduler:
                     if p1 and p2 and p1.type == "persona" and p2.type == "persona":
                         f_id = f"auto_expert_{p1.id}_{p2.id}"[:32]
                         if f_id not in self.registry.registry:
-                            f_obj = ContextObject(id=f_id, type="persona", title=f"Autonomic Expert ({p1.title})", summary="Evolved", data=f"{p1.data}\n{p2.data}", trust_score=0.9, source="kernel_evolution")
+                            f_obj = ContextObject(id=f_id, type="persona", title=f"Autonomic Expert ({p1.title} + {p2.title})", summary="Evolved", data=f"{p1.data}\n{p2.data}", trust_score=0.9, source="kernel_evolution")
                             self.registry.register(f_obj)
 
     def _calculate_cost(self, instr: AITInstruction) -> float:
@@ -286,8 +279,10 @@ class Scheduler:
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
-        
-        # Neural Prediction Tracking
+        if not is_interrupt:
+            cost = self._calculate_cost(instr)
+            if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}
+            self.retrieval_policy.cognitive_budget -= cost
         if instr.action == "load":
             if self.cognitive_history:
                 prev = self.cognitive_history[-1]
@@ -296,14 +291,6 @@ class Scheduler:
                     self.transition_matrix[prev][instr.target_id] = self.transition_matrix[prev].get(instr.target_id, 0) + 1
             self.cognitive_history.append(instr.target_id)
             if len(self.cognitive_history) > 20: self.cognitive_history.pop(0)
-
-        # Budget Management
-        if not is_interrupt:
-            cost = self._calculate_cost(instr)
-            if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}
-            self.retrieval_policy.cognitive_budget -= cost
-
-        # Firewall & Approval
         meta, violations = PayloadSanitizer.sanitize(instr.action, instr.metadata)
         if violations:
             instr = instr._replace(metadata=meta)
@@ -311,21 +298,16 @@ class Scheduler:
                 req_id = self.approvals.request(self.current_agent, instr, "Security Violations")
                 status = "awaiting_approval"; result = f"Gated: {req_id}"; self._log_audit(instr, status, result, effective_priority)
                 return {"status": status, "result": result, "request_id": req_id}
-
-        # Guards
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if obj.owner_pid is not None and obj.owner_pid != self.current_pid and self.current_pid != 0:
                 status = "error"; result = "ERR_PROCESS_ISOLATION_VIOLATION"
-            elif not self.acl.check(self.current_agent, instr.target_id, obj.type):
-                status = "error"; result = "ERR_PERMISSION_DENIED"
+            elif not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
         elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm", "consensus", "reincarnate", "exec", "rewrite"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
-
         if status == "ok":
             if instr.action == "load":
                 if not self.store.load(instr.target_id, effective_priority):
-                    # Compatibility with Spec v0.1 tests
                     status = "error"; result = "ERR_LOAD_FAILED_CHECK_STATUS" if getattr(obj, 'status', '') == 'invalidated' else "ERR_LOAD_FAILED"
                 else:
                     if self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
@@ -348,7 +330,7 @@ class Scheduler:
                 if obj:
                     data_match = re.search(r'data=(.*)', instr.metadata or "")
                     if data_match: obj.data = data_match.group(1)
-                    else: obj.data = instr.metadata # Legacy support
+                    else: obj.data = instr.metadata
                     obj.state.dirty = True; result = "Updated"
             elif instr.action == "trust":
                 s = re.search(r'score=([0-9\.]+)', instr.metadata or "")
@@ -429,12 +411,9 @@ class Scheduler:
             elif instr.action == "branch":
                 b_obj = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b_obj:
-                    # CPOS v0.3: Initial trust for hypotheses is lower
-                    b_obj.trust_score = 0.4
-                    b_obj.status = "active"
-                    b_obj.metadata["is_hypothesis"] = True
-                    self.store.load(b_obj.id, effective_priority)
-                    result = f"Branched: {b_obj.id}"
+                    b_obj.trust_score = 0.4; b_obj.status = "active"; b_obj.metadata["is_hypothesis"] = True
+                    self.acl.grant(self.current_agent, b_obj.id) # Grant permission
+                    self.store.load(b_obj.id, effective_priority); result = f"Branched: {b_obj.id}"
                 else: status = "error"; result = "ERR_BRANCH_FAILED"
             elif instr.action == "commit":
                 if obj and obj.parent:
@@ -444,7 +423,8 @@ class Scheduler:
                 if obj and obj.parent: self.store.unload(obj.id); obj.status = "deleted"; result = "Rolled back"
             elif instr.action == "merge":
                 p = self.registry.get(obj.parent) if obj and obj.parent else None
-                if p: p.data = obj.data; p.state.dirty = True; result = "Merged"; self.store.unload(obj.id)
+                if p:
+                    p.data = obj.data; p.state.dirty = True; self.store.unload(obj.id); obj.status = "deleted"; result = "Merged"
                 else: status = "error"; result = "ERR_MERGE_FAILED"
             elif instr.action == "gc": self.policy.enforce(); result = "Memory GCed"
             elif instr.action == "device":
@@ -460,15 +440,13 @@ class Scheduler:
                     if gw: gw.connect_server(m.group(1), u.group(1)); result = f"MCP Server '{m.group(1)}' OK"
             elif instr.action == "policy":
                 t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or ""); lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
-                ex = re.search(r'exec=(true|false)', instr.metadata or ""); gl = re.search(r'glitch=(true|false)', instr.metadata or "")
-                sm = re.search(r'self_mod=(true|false)', instr.metadata or "")
+                ex = re.search(r'exec=(true|false)', instr.metadata or ""); gl = re.search(r'glitch=(true|false)', instr.metadata or ""); sm = re.search(r'self_mod=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
                 if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
                 if lb: self.retrieval_policy.load_balancing_enabled = (lb.group(1) == "true"); result = f"Load Balancing set to {lb.group(1)}"
                 if ex: self.retrieval_policy.real_world_exec_enabled = (ex.group(1) == "true"); result = f"Exec set to {ex.group(1)}"
                 if gl: self.retrieval_policy.visual_glitch_enabled = (gl.group(1) == "true"); result = f"Glitch set to {gl.group(1)}"
                 if sm: self.retrieval_policy.self_modification_enabled = (sm.group(1) == "true"); result = f"Self-Mod set to {sm.group(1)}"
-                
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 

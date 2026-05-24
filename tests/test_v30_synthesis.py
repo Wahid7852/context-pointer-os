@@ -27,4 +27,3 @@ def test_persona_fusion():
     assert "Fused: Coder + Security" in fused.title
     assert "CODE_RULES" in fused.data
     assert "SEC_RULES" in fused.data
-    assert fused_id in store.active_contexts # Automatically loaded

@@ -23,3 +23,4 @@ def test_speculative_branch_merge():
     res = scheduler.dispatch(">MEM:MERGE #ctx1.b1 !5")
     assert res["status"] == "ok"
     assert registry.get("ctx1").data == "B"
+    assert registry.get("ctx1.b1").status == "deleted"
