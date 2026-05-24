@@ -45,6 +45,7 @@ class AITCodec:
         'a': 'policy',
         'j': 'mode',
         'e': 'exchange',
+        '8': 'fuse',
         'v': 'device',
         'k': 'lock',
         'n': 'unlock'

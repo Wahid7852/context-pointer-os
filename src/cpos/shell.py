@@ -3,54 +3,98 @@ import sys
 from .kernel import CPOS
 
 class CognitiveShell:
-    """The 'Virtual Terminal'. Interactive EAP interface for agents or humans."""
+    """[CPOS v3.0] The 'Interactive Kernel Interface'. 
+    Supports real-time monitoring and advanced cognitive synthesis commands."""
+    
     def __init__(self, kernel: CPOS):
         self.kernel = kernel
         self.current_agent = "root"
         self.current_pid = 0
+        self.monitor_enabled = True
 
     def start(self):
-        print("\n" + "="*50)
-        print("   CPOS COGNITIVE SHELL v1.4")
-        print("   Type 'exit' to quit, 'help' for examples.")
-        print("="*50)
+        # ANSI Colors
+        CYAN = "\033[96m"; GREEN = "\033[92m"; YELLOW = "\033[93m"; BOLD = "\033[1m"; RESET = "\033[0m"
+        
+        print("\n" + "="*60)
+        print(f"{BOLD}{CYAN}   CONTEXT POINTER OS - INTERACTIVE SHELL v3.0{RESET}")
+        print(f"{YELLOW}   Cognitive Synthesis / Dynamic Persona Support{RESET}")
+        print("   Type 'exit' to quit, 'monitor' to toggle, 'help' for info.")
+        print("="*60)
         
         while True:
             try:
-                prompt = f"{self.current_agent}@pid{self.current_pid}> "
+                if self.monitor_enabled:
+                    self.kernel.monitor()
+                
+                prompt = f"{BOLD}{GREEN}{self.current_agent}@cpos{RESET}:{BOLD}{CYAN}/# {RESET}"
                 line = input(prompt).strip()
                 
                 if not line: continue
                 if line.lower() in ["exit", "quit"]: break
+                
                 if line.lower() == "help":
-                    print("Examples:\n  >MEM:LS #ctx0 !1\n  >MEM:LOAD #ctx7 !9\n  >MEM:SYS #ctx0 !9 | func=snapshot")
+                    self._print_help()
                     continue
                 
-                # Handle session changes (e.g. su agent_name)
-                if line.startswith("su "):
-                    self.current_agent = line.split(" ")[1]
-                    print(f"Switched to {self.current_agent}")
+                if line.lower() == "monitor":
+                    self.monitor_enabled = not self.monitor_enabled
+                    print(f"Monitor {'ENABLED' if self.monitor_enabled else 'DISABLED'}")
                     continue
 
+                if line.startswith("su "):
+                    parts = line.split(" ")
+                    if len(parts) > 1:
+                        self.current_agent = parts[1]
+                        print(f"Logged in as {self.current_agent}")
+                    continue
+
+                # Execute EAP instruction
                 res = self.kernel.step(line, agent=self.current_agent, pid=self.current_pid)
                 
                 if res["status"] == "ok":
                     if res.get("result"):
-                        print(f"\n[OUTPUT]\n{res['result']}\n")
+                        print(f"\n{BOLD}[KERNEL OUTPUT]{RESET}\n{res['result']}\n")
                     else:
-                        print("\n[OK]\n")
+                        print(f"\n{BOLD}[KERNEL OK]{RESET}\n")
                 else:
-                    print(f"\n[ERROR] {res.get('code') or res.get('result')}\n")
+                    print(f"\n{BOLD}\033[91m[KERNEL ERROR]{RESET} {res.get('result') or res.get('code')}\n")
                     
             except KeyboardInterrupt:
+                print("\nInterrupted.")
                 break
             except Exception as e:
-                print(f"Shell Error: {str(e)}")
+                print(f"\033[91mShell Error: {str(e)}\033[0m")
+
+    def _print_help(self):
+        print("\n" + "-"*40)
+        print("Available Commands:")
+        print("  >MEM:LOAD #ID !PRIO      - Load a context")
+        print("  >MEM:QUERY #0 !5 | q=\"Q\" - Semantic search")
+        print("  >PER:FUSE #ID !9 | with=ID - Merge personas")
+        print("  >SEC:MODE !9 | mode=MODE - Switch mode")
+        print("  monitor                  - Toggle real-time view")
+        print("  su AGENT                 - Switch current user")
+        print("  exit                     - Shut down kernel")
+        print("-"*40 + "\n")
 
 def main():
-    workspace = "/tmp/cpos_shell"
+    workspace = "/tmp/cpos_v30_interactive"
     os.makedirs(workspace, exist_ok=True)
-    kernel = CPOS(workspace)
+    # Clear old data
+    for f in os.listdir(workspace): os.remove(os.path.join(workspace, f))
+    
+    kernel = CPOS(workspace, node_id="local-brain")
+    
+    # Pre-register some fun personas for the user to play with
+    from .registry import ContextObject
+    kernel.registry.register(ContextObject(
+        id="persona_coder", type="persona", title="Python Expert", summary="Coding bot", data="expert_coder"
+    ))
+    kernel.registry.register(ContextObject(
+        id="persona_hacker", type="persona", title="Security Specialist", summary="Pen-tester bot", data="sec_hacker"
+    ))
+    
     shell = CognitiveShell(kernel)
     shell.start()
 

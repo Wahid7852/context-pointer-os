@@ -394,6 +394,30 @@ class Scheduler:
                 if to_match and obj:
                     recipient = to_match.group(1); msg_id = f"ptr_{len(self.audit_log)}"
                     self.acl.grant(recipient, msg_id); self.acl.grant(recipient, instr.target_id); result = f"Shared via {msg_id}"
+            elif instr.action == "fuse":
+                # [CPOS v3.0] Cognitive Synthesis: Merge two contexts
+                with_match = re.search(r'with=([a-zA-Z0-9\._-]+)', instr.metadata or "")
+                if with_match and obj:
+                    other_id = with_match.group(1)
+                    other = self.registry.get(other_id)
+                    if other:
+                        fused_id = f"fused_{instr.target_id}_{other_id}"[:32]
+                        # Create fused object
+                        fused_obj = ContextObject(
+                            id=fused_id,
+                            type=obj.type, # Inherit type (e.g. persona)
+                            title=f"Fused: {obj.title} + {other.title}",
+                            summary=f"Synthesized from {obj.id} and {other_id}",
+                            data=f"--- FUSED CONTEXT ---\nPrimary: {obj.data}\nSecondary: {other.data}\n--- END FUSION ---",
+                            trust_score=(obj.trust_score + other.trust_score) / 2.0,
+                            source=f"kernel_synthesis",
+                            metadata={"fused_from": [obj.id, other_id]}
+                        )
+                        self.registry.register(fused_obj)
+                        self.store.load(fused_id, effective_priority)
+                        result = f"Fusion complete: {fused_id}"
+                    else: status = "error"; result = "ERR_OTHER_CTX_NOT_FOUND"
+                else: status = "error"; result = "ERR_FUSE_FAILED"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; b.metadata["is_hypothesis"] = True; self.store.load(b.id); result = f"Branched: {b.id}"

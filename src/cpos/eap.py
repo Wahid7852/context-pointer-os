@@ -37,6 +37,7 @@ class EAPParser:
         'SYNC': 'sync',
         'SEND': 'send',
         'EXCHANGE': 'exchange',
+        'FUSE': 'fuse',
         'GC': 'gc',
         'LS': 'ls',
         'PS': 'ps',
