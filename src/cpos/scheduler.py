@@ -101,11 +101,14 @@ class Scheduler:
         self.approvals = ApprovalStore()
         self.approval_policy = ApprovalPolicy()
         self.retrieval_policy = RetrievalPolicy()
-        # [CPOS v3.0+] Cognitive Synthesis & Auditor & Dreaming & Budget
+        
+        # [CPOS v3.0+] Features
         self.cognitive_history: List[str] = []
         self.transition_matrix: Dict[str, Dict[str, int]] = {}
         self.current_persona: Optional[str] = None
         self.auditor_alerts: List[str] = [] 
+        
+        # Initialize Journal Integrity
         self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
 
     def set_agent(self, agent_name: str, pid: int = 0):
@@ -113,38 +116,52 @@ class Scheduler:
         self.current_pid = pid
 
     def get_active_content(self) -> str:
-        """[CPOS v0.2/v3.0] Context Reconstructor: Smartly assembles contexts with Auditor alerts."""
+        """[CPOS v0.2/v3.0] Context Reconstructor: Smartly assembles prompt content."""
         output = []
         role = self.acl.get_role(self.current_agent)
         if self.current_agent == "root": role = Role.ROOT
+        
         SENSITIVITY_RANK = {"public": 0, "internal": 1, "private": 2, "restricted": 3}
         max_allowed_rank = SENSITIVITY_RANK.get(self.retrieval_policy.max_sensitivity_allowed, 1)
         if role == Role.ROOT: max_allowed_rank = 3
+
         eligible_contexts = []
         for ctx_id, obj in self.store.active_contexts.items():
             if obj.type not in self.retrieval_policy.allowed_context_types and role != Role.ROOT: continue
             if not self.acl.check(self.current_agent, obj.id, obj.type): continue
             eligible_contexts.append(obj)
+
+        # Prioritize
         eligible_contexts.sort(key=lambda x: (x.trust_score * 0.6 + x.importance * 0.4), reverse=True)
-        active_ids = {obj.id for obj in eligible_contexts}; conflicts = []
+        active_ids = {obj.id for obj in eligible_contexts}
+        conflicts = []
+
         for obj in eligible_contexts:
             if obj.parent and obj.parent in active_ids:
-                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active.")
+                conflicts.append(f"WARNING: Both parent '{obj.parent}' and branch '{obj.id}' are active. Information may overlap.")
+            
             if obj.trust_score < self.retrieval_policy.minimum_trust_score and role != Role.ROOT:
                 output.append(f"[{obj.id}: {obj.title}] (Status: {obj.status})\n[FILTERED] Trust Score {obj.trust_score} below threshold.")
                 continue
+
             obj_rank = SENSITIVITY_RANK.get(obj.sensitivity_level, 1)
             header = f"[{obj.id}: {obj.title}]"
             meta = f"Type: {obj.type} | Trust: {obj.trust_score:.2f} | Source: {obj.source} | Status: {obj.status}"
             if obj.status == "stale": meta += " (ATTENTION: Information is stale)"
+            
             content = f"{header}\n{meta}\nSummary: {obj.summary}"
             if obj.data:
                 d = obj.data
-                if obj_rank > max_allowed_rank: d = f"[REDACTED: Sensitivity exceeds policy]"
-                elif role == Role.GUEST and obj.type in ["persona", "neurostate"]: d = "[REDACTED: Restricted]"
+                if obj_rank > max_allowed_rank:
+                    d = f"[REDACTED: Sensitivity Level '{obj.sensitivity_level}' exceeds current policy]"
+                elif role == Role.GUEST and obj.type in ["persona", "neurostate"]:
+                    d = "[REDACTED: Restricted to Guest Role]"
                 content += f"\nDATA: {d}"
             output.append(content)
-            if self.retrieval_policy.audit_required: self.registry._log_event("context_retrieval", obj.id, {"agent": self.current_agent, "role": str(role)})
+            
+            if self.retrieval_policy.audit_required:
+                self.registry._log_event("context_retrieval", obj.id, {"agent": self.current_agent, "role": str(role)})
+
         final_output = "\n\n".join(output)
         if self.current_persona: final_output = f"--- ACTIVE PERSONA: {self.current_persona} ---\n\n" + final_output
         if self.auditor_alerts: final_output = "--- KERNEL AUDITOR ALERTS ---\n" + "\n".join(self.auditor_alerts) + "\n\n" + final_output
@@ -162,10 +179,13 @@ class Scheduler:
 
     def dispatch(self, instruction_input: str):
         now = time.time(); self.tick_count += 1
+        
+        # Periodic Tasks
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
         if self.retrieval_policy.dreaming_enabled: self.dream()
         if self.retrieval_policy.evolution_enabled and self.tick_count % 15 == 0: self.evolve()
 
+        # Heat Decay & Auto-Staling
         for obj in self.registry.registry.values():
             last = getattr(obj, 'last_accessed', now)
             if now - last > 1.0: obj.access_heat = max(0.0, obj.access_heat - ((now - last) * 0.1))
@@ -174,21 +194,26 @@ class Scheduler:
             obj.last_accessed = now
 
         if self.retrieval_policy.mode == CognitiveMode.AUTONOMOUS: self._auto_validate()
+        
+        # Priority Boosting
         if self.tick_count % 5 == 0:
-            bq = []
-            for i in self.task_queue: bq.append(i._replace(priority=min(9, i.priority + 1)))
-            self.task_queue = bq
+            self.task_queue = [i._replace(priority=min(9, i.priority + 1)) for i in self.task_queue]
+
+        # Watchdog IRQ
         ns_obj = self.registry.get("ctx7")
         if ns_obj and ns_obj.data:
             try:
                 if float(json.loads(ns_obj.data).get("corruption", 0)) > 0.8:
                     self.interrupt_queue.append(AITInstruction("neurostate", "ctx7", "write", 9, '{"calm": 0.5, "corruption": 0.0}'))
             except: pass
+
         while self.interrupt_queue:
             self.interrupt_queue.sort(key=lambda x: x.priority, reverse=True)
             self.execute(self.interrupt_queue.pop(0), is_interrupt=True)
+
         instr = EAPParser.parse(instruction_input) if instruction_input.startswith('>') else AITCodec.decode(instruction_input)
         if not instr: return {"status": "error", "code": "ERR_UNKNOWN_INSTRUCTION"}
+        
         self.task_queue.append(instr)
         self.task_queue.sort(key=lambda x: x.priority, reverse=True)
         return self.execute(self.task_queue.pop(0))
@@ -253,7 +278,7 @@ class Scheduler:
                             self.registry.register(f_obj)
 
     def _calculate_cost(self, instr: AITInstruction) -> float:
-        base_costs = {"load": 10.0, "unload": 2.0, "write": 15.0, "query": 50.0, "fuse": 30.0, "synth": 40.0, "swarm": 100.0, "connect": 20.0, "branch": 25.0, "commit": 35.0, "ls": 1.0, "ps": 1.0, "mode": 5.0, "policy": 5.0, "consensus": 60.0, "reincarnate": 150.0}
+        base_costs = {"load": 10.0, "unload": 2.0, "write": 15.0, "query": 50.0, "fuse": 30.0, "synth": 40.0, "swarm": 100.0, "connect": 20.0, "branch": 25.0, "commit": 35.0, "ls": 1.0, "ps": 1.0, "mode": 5.0, "policy": 5.0, "consensus": 60.0, "reincarnate": 150.0, "exec": 100.0, "rewrite": 200.0, "merge": 10.0, "summarize": 5.0, "raw": 5.0}
         cost = base_costs.get(instr.action, 5.0)
         if self.retrieval_policy.cognitive_budget < self.retrieval_policy.low_budget_threshold: cost *= 1.5
         return cost
@@ -261,10 +286,8 @@ class Scheduler:
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
-        if not is_interrupt:
-            cost = self._calculate_cost(instr)
-            if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}
-            self.retrieval_policy.cognitive_budget -= cost
+        
+        # Neural Prediction Tracking
         if instr.action == "load":
             if self.cognitive_history:
                 prev = self.cognitive_history[-1]
@@ -273,6 +296,14 @@ class Scheduler:
                     self.transition_matrix[prev][instr.target_id] = self.transition_matrix[prev].get(instr.target_id, 0) + 1
             self.cognitive_history.append(instr.target_id)
             if len(self.cognitive_history) > 20: self.cognitive_history.pop(0)
+
+        # Budget Management
+        if not is_interrupt:
+            cost = self._calculate_cost(instr)
+            if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}
+            self.retrieval_policy.cognitive_budget -= cost
+
+        # Firewall & Approval
         meta, violations = PayloadSanitizer.sanitize(instr.action, instr.metadata)
         if violations:
             instr = instr._replace(metadata=meta)
@@ -280,18 +311,30 @@ class Scheduler:
                 req_id = self.approvals.request(self.current_agent, instr, "Security Violations")
                 status = "awaiting_approval"; result = f"Gated: {req_id}"; self._log_audit(instr, status, result, effective_priority)
                 return {"status": status, "result": result, "request_id": req_id}
+
+        # Guards
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
-            if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
+            if obj.owner_pid is not None and obj.owner_pid != self.current_pid and self.current_pid != 0:
+                status = "error"; result = "ERR_PROCESS_ISOLATION_VIOLATION"
+            elif not self.acl.check(self.current_agent, instr.target_id, obj.type):
+                status = "error"; result = "ERR_PERMISSION_DENIED"
         elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm", "consensus", "reincarnate", "exec", "rewrite"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
+
         if status == "ok":
             if instr.action == "load":
-                if not self.store.load(instr.target_id, effective_priority): status = "error"; result = "ERR_LOAD_FAILED"
+                if not self.store.load(instr.target_id, effective_priority):
+                    # Compatibility with Spec v0.1 tests
+                    status = "error"; result = "ERR_LOAD_FAILED_CHECK_STATUS" if getattr(obj, 'status', '') == 'invalidated' else "ERR_LOAD_FAILED"
                 else:
                     if self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
                     if instr.domain == "persona": self.current_persona = instr.target_id; result = f"Persona set to {instr.target_id}"
-            elif instr.action == "unload": self.store.unload(instr.target_id); self.current_persona = None if self.current_persona == instr.target_id else self.current_persona
+            elif instr.action == "unload": 
+                self.store.unload(instr.target_id); 
+                if self.current_persona == instr.target_id: self.current_persona = None
+            elif instr.action == "summarize": result = obj.summary if obj else "ERR"
+            elif instr.action == "raw": result = obj.data if obj else "ERR"
             elif instr.action == "query":
                 q = re.search(r'q="([^"]+)"', instr.metadata or ""); remote = "remote=true" in (instr.metadata or "").lower()
                 if q:
@@ -303,29 +346,45 @@ class Scheduler:
                 else: status = "error"; result = "ERR_INVALID_QUERY"
             elif instr.action == "write":
                 if obj:
-                    if '=' in (instr.metadata or ""): obj.data = instr.metadata.split('=',1)[1]
-                    else: obj.data = instr.metadata
+                    data_match = re.search(r'data=(.*)', instr.metadata or "")
+                    if data_match: obj.data = data_match.group(1)
+                    else: obj.data = instr.metadata # Legacy support
                     obj.state.dirty = True; result = "Updated"
             elif instr.action == "trust":
                 s = re.search(r'score=([0-9\.]+)', instr.metadata or "")
                 if s: self.registry.update_trust(instr.target_id, float(s.group(1)), "Manual Update"); result = "Trust Updated"
-            elif instr.action == "invalidate": self.registry.invalidate(instr.target_id, "Manual Invalidation"); self.store.unload(instr.target_id); result = "Invalidated"
+            elif instr.action == "invalidate":
+                self.registry.invalidate(instr.target_id, "Manual Invalidation"); self.store.unload(instr.target_id); result = "Invalidated"
             elif instr.action == "mode":
                 m = re.search(r'mode=([a-z]+)', instr.metadata or "")
                 if m:
                     try: self.retrieval_policy.mode = CognitiveMode(m.group(1)); result = f"Mode set to {m.group(1)}"
                     except: status = "error"; result = "ERR_INVALID_MODE"
             elif instr.action == "ls": result = "\n".join([f"{o.id} [{o.type}]" for o in self.registry.registry.values() if self.acl.check(self.current_agent, o.id, o.type)])
+            elif instr.action == "ps": result = f"Active Agent: {self.current_agent} (PID: {self.current_pid})"
+            elif instr.action == "syscall":
+                f = re.search(r'func=([a-z_]+)', instr.metadata or "")
+                if f and f.group(1) == "listdir" and self.acl.get_role(self.current_agent) == Role.ROOT: result = str(os.listdir('.')[:5])
+                else: status = "error"; result = "ERR_SYSCALL_DENIED"
+            elif instr.action == "send":
+                to_m = re.search(r'to=([a-zA-Z0-9_-]+)', instr.metadata or ""); body_m = re.search(r'body="([^"]+)"', instr.metadata or "")
+                if to_m and body_m:
+                    recipient = to_m.group(1); body = body_m.group(1); msg_id = f"msg_{len(self.audit_log)}"
+                    msg_obj = ContextObject(id=msg_id, type="message", title="Msg", summary=body, data=body)
+                    self.registry.register(msg_obj); self.acl.grant(recipient, msg_id); result = f"Sent to {recipient} as {msg_id}"
+                else: status = "error"; result = "ERR_INVALID_IPC_FORMAT"
             elif instr.action == "exchange":
                 to = re.search(r'to=([a-zA-Z0-9_-]+)', instr.metadata or "")
                 if to and obj:
-                    recipient = to.group(1); msg_id = f"ptr_{len(self.audit_log)}"; self.acl.grant(recipient, msg_id); self.acl.grant(recipient, instr.target_id); result = f"Shared via {msg_id}"
+                    recipient = to.group(1); msg_id = f"ptr_{len(self.audit_log)}"
+                    msg_obj = ContextObject(id=msg_id, type="pointer_exchange", title=f"Shared: {obj.id}", summary=f"Shared by {self.current_agent}", data=f"ptr://{obj.type}/{obj.id}")
+                    self.registry.register(msg_obj); self.acl.grant(recipient, msg_id); self.acl.grant(recipient, instr.target_id); result = f"Shared via {msg_id}"
             elif instr.action == "fuse":
                 w = re.search(r'with=([a-zA-Z0-9\._-]+)', instr.metadata or "")
                 other = self.registry.get(w.group(1)) if w else None
                 if other and obj:
                     f_id = f"fused_{instr.target_id}_{other.id}"[:32]
-                    f_obj = ContextObject(id=f_id, type=obj.type, title=f"Fused: {obj.title}", summary=f"Synth from {obj.id},{other.id}", data=f"{obj.data}\n{other.data}", trust_score=(obj.trust_score+other.trust_score)/2.0)
+                    f_obj = ContextObject(id=f_id, type=obj.type, title=f"Fused: {obj.title} + {other.title}", summary=f"Synth from {obj.id},{other.id}", data=f"{obj.data}\n{other.data}", trust_score=(obj.trust_score+other.trust_score)/2.0)
                     self.registry.register(f_obj); self.store.load(f_id); result = f"Fused: {f_id}"
             elif instr.action == "synth":
                 f = re.search(r'from="([^"]+)"', instr.metadata or "")
@@ -376,6 +435,16 @@ class Scheduler:
                     if p: p.data = obj.data; p.trust_score = min(1.0, p.trust_score + 0.1); self.store.unload(obj.id); obj.status = "deleted"; result = "Committed"
             elif instr.action == "rollback":
                 if obj and obj.parent: self.store.unload(obj.id); obj.status = "deleted"; result = "Rolled back"
+            elif instr.action == "merge":
+                p = self.registry.get(obj.parent) if obj and obj.parent else None
+                if p: p.data = obj.data; p.state.dirty = True; result = "Merged"; self.store.unload(obj.id)
+                else: status = "error"; result = "ERR_MERGE_FAILED"
+            elif instr.action == "gc": self.policy.enforce(); result = "Memory GCed"
+            elif instr.action == "device":
+                m = re.search(r'mount=([a-z]+)', instr.metadata or ""); p = re.search(r'path=([^ ]*)', instr.metadata or "")
+                if m and self.store.storage:
+                    prefix = m.group(1); path = p.group(1) if p else ""; self.store.storage.mount(prefix, path); result = f"Mounted {m.group(1)}"
+                else: status = "error"; result = "FAILED"
             elif instr.action == "connect":
                 a = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or ""); k = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or ""); m = re.search(r'mcp=([a-zA-Z0-9_-]+)', instr.metadata or ""); u = re.search(r'url=([^ ]+)', instr.metadata or "")
                 if a and k and self.store.node and self.store.node.handshake(a.group(1), k.group(1)): result = "Handshake OK"
@@ -392,6 +461,7 @@ class Scheduler:
                 if ex: self.retrieval_policy.real_world_exec_enabled = (ex.group(1) == "true"); result = f"Exec set to {ex.group(1)}"
                 if gl: self.retrieval_policy.visual_glitch_enabled = (gl.group(1) == "true"); result = f"Glitch set to {gl.group(1)}"
                 if sm: self.retrieval_policy.self_modification_enabled = (sm.group(1) == "true"); result = f"Self-Mod set to {sm.group(1)}"
+                
         self._log_audit(instr, status, result, effective_priority)
         return {"status": status, "result": result}
 
