@@ -46,6 +46,7 @@ class AITCodec:
         'j': 'mode',
         'e': 'exchange',
         '8': 'fuse',
+        '9': 'synth',
         'v': 'device',
         'k': 'lock',
         'n': 'unlock'

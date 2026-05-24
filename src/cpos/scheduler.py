@@ -5,7 +5,7 @@ import os
 import hashlib
 import hmac
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel, Field
 from .ait import AITInstruction, AITCodec
 from .eap import EAPParser
@@ -328,7 +328,6 @@ class Scheduler:
             if len(self.cognitive_history) > 20: self.cognitive_history.pop(0)
 
         # 0. Cognitive Firewall, Approval, Guards...
-        # [Simplified for visibility, keeping previous logic intact]
         sanitized_metadata, violations = PayloadSanitizer.sanitize(instr.action, instr.metadata)
         needs_approval = False
         approval_reason = ""
@@ -346,7 +345,7 @@ class Scheduler:
             # [CPOS v0.7] Real-time Heat Tracking: Increase heat upon access
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
-        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode"]:
+        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
 
         if status == "ok":
@@ -418,6 +417,30 @@ class Scheduler:
                         result = f"Fusion complete: {fused_id}"
                     else: status = "error"; result = "ERR_OTHER_CTX_NOT_FOUND"
                 else: status = "error"; result = "ERR_FUSE_FAILED"
+            elif instr.action == "synth":
+                # [CPOS v3.0] Concept Abstraction: Synthesize multiple contexts
+                from_match = re.search(r'from="([^"]+)"', instr.metadata or "")
+                if from_match:
+                    source_ids = [s.strip() for s in from_match.group(1).split(",")]
+                    valid_objs = [self.registry.get(sid) for sid in source_ids if self.registry.get(sid)]
+                    if valid_objs:
+                        # Create a high-level Concept
+                        synth_data = "\n\n".join([f"--- {o.title} ---\n{o.data or o.summary}" for o in valid_objs])
+                        concept_id = instr.target_id
+                        concept_obj = ContextObject(
+                            id=concept_id,
+                            type="concept",
+                            title=f"Synthesized Concept ({len(valid_objs)} sources)",
+                            summary=f"High-level abstraction of: {', '.join([o.id for o in valid_objs])}",
+                            data=f"DISTILLED KNOWLEDGE:\n{synth_data}",
+                            trust_score=sum(o.trust_score for o in valid_objs) / len(valid_objs),
+                            source="kernel_abstraction"
+                        )
+                        self.registry.register(concept_obj)
+                        self.store.load(concept_id, effective_priority)
+                        result = f"Abstraction complete: {concept_id}"
+                    else: status = "error"; result = "ERR_NO_VALID_SOURCES"
+                else: status = "error"; result = "ERR_INVALID_METADATA"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; b.metadata["is_hypothesis"] = True; self.store.load(b.id); result = f"Branched: {b.id}"
@@ -430,17 +453,11 @@ class Scheduler:
             elif instr.action == "connect":
                 addr = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or ""); key = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or "")
                 mcp = re.search(r'mcp=([a-zA-Z0-9_-]+)', instr.metadata or ""); url = re.search(r'url=([^ ]+)', instr.metadata or "")
-                
-                if addr and key and self.store.node and self.store.node.handshake(addr.group(1), key.group(1)): 
-                    result = "Handshake OK"
+                if addr and key and self.store.node and self.store.node.handshake(addr.group(1), key.group(1)): result = "Handshake OK"
                 elif mcp and url and self.store.gateways:
                     mcp_id = mcp.group(1); mcp_url = url.group(1)
-                    # Get the mcp gateway
                     mcp_gw = self.store.gateways.gateways.get("mcp")
-                    if mcp_gw:
-                        mcp_gw.connect_server(mcp_id, mcp_url)
-                        result = f"MCP Server '{mcp_id}' registered at {mcp_url}"
-                    else: status = "error"; result = "ERR_MCP_GW_NOT_FOUND"
+                    if mcp_gw: mcp_gw.connect_server(mcp_id, mcp_url); result = f"MCP Server '{mcp_id}' registered at {mcp_url}"
                 else: status = "error"; result = "ERR_HANDSHAKE_OR_MCP_FAILED"
             elif instr.action == "policy":
                 if self.acl.get_role(self.current_agent) == Role.ROOT:
