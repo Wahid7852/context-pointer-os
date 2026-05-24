@@ -6,7 +6,7 @@ from cpos.acl import Role
 
 def main():
     print("================================================")
-    print("   CONTEXT POINTER OS v1.0 - FINAL RELEASE      ")
+    print("   CONTEXT POINTER OS v0.1 - Research Demo      ")
     print("================================================")
     
     # 1. Initialization
