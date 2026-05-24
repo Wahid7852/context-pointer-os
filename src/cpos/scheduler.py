@@ -275,7 +275,21 @@ class Scheduler:
                 if self.current_persona == instr.target_id: self.current_persona = None
             elif instr.action == "query":
                 q = re.search(r'q="([^"]+)"', instr.metadata or "")
-                if q: result = [f"{m[0].id} (Score: {m[1]:.2f})" for m in self.registry.semantic_search(q.group(1), limit=3)]
+                remote = "remote=true" in (instr.metadata or "").lower()
+                if q:
+                    query_text = q.group(1)
+                    local_matches = self.registry.semantic_search(query_text, limit=3)
+                    result = [f"LOCAL: {m[0].id} (Score: {m[1]:.2f})" for m in local_matches]
+                    
+                    # [CPOS v4.0] Distributed Knowledge Discovery
+                    if remote and self.store.node:
+                        for addr, is_auth in self.store.node.auth_nodes.items():
+                            if is_auth:
+                                remote_matches = self.store.node.query_remote_knowledge(addr, query_text)
+                                for rm in remote_matches:
+                                    result.append(f"REMOTE [{addr}]: {rm['id']} -> {rm['ptr_uri']} (Score: {rm['score']:.2f})")
+                    
+                    if not result: result = "No relevant knowledge found."
                 else: status = "error"; result = "ERR_INVALID_QUERY"
             elif instr.action == "write":
                 if obj:

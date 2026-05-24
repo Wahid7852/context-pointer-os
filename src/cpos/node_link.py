@@ -65,6 +65,36 @@ class NodeLink:
         
         return peer._handle_fetch_request(self.full_address, ctx_type, ctx_id)
 
+    def query_remote_knowledge(self, remote_addr: str, query: str) -> List[Dict[str, Any]]:
+        """Queries a remote node for context objects matching a semantic query."""
+        if remote_addr not in self.peers or not self.auth_nodes.get(remote_addr):
+            return []
+        
+        peer = self.peers[remote_addr]
+        print(f"--- [DISCOVERY] {self.full_address} querying {remote_addr} for '{query}' ---")
+        return peer._handle_query_request(self.full_address, query)
+
+    def _handle_query_request(self, requester_addr: str, query: str) -> List[Dict[str, Any]]:
+        """Handles an incoming semantic query request from a peer."""
+        if not self.kernel or not self.auth_nodes.get(requester_addr):
+            return []
+        
+        # Perform local semantic search
+        matches = self.kernel.registry.semantic_search(query, limit=2)
+        results = []
+        for obj, score in matches:
+            # Filter sensitivity (v4.0 Security Rule: only public/internal for remote query)
+            if obj.sensitivity_level in ["public", "internal"]:
+                results.append({
+                    "id": obj.id,
+                    "type": obj.type,
+                    "title": obj.title,
+                    "summary": obj.summary,
+                    "score": score,
+                    "ptr_uri": f"ptr://{self.full_address}/{obj.type}/{obj.id}"
+                })
+        return results
+
     def _handle_fetch_request(self, requester_addr: str, ctx_type: str, ctx_id: str) -> Optional[ContextObject]:
         """Handles an incoming request for context."""
         if not self.kernel:
