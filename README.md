@@ -2,7 +2,22 @@
 
 > **"LLM agents don't need bigger memory. They need a cognitive memory kernel."**
 
-Context Pointer OS (CPOS) is a specialized memory management layer for long-running LLM agents. Instead of overfilling the context window with conversation history, CPOS introduces **Context Pointers** (#ctx) to dynamically mount, swap, and protect information, functioning like a virtual memory OS for artificial intelligence.
+Context Pointer OS (CPOS) is a specialized memory management layer for long-running LLM agents. Instead of overfilling the context window with conversation history, CPOS introduces **Context Pointers** (#ctx) to dynamically mount, swap, and protect information, functioning as a **virtual memory layer for long-context LLM agents**.
+
+---
+
+## 🗺️ System Architecture
+
+```text
+       [ LLM Prompt (Active Context) ]
+                    ↑
+             Context Pointers (#ctx)
+                    ↑
+       [ CPOS Kernel (Memory Registry) ]
+          /         |          \
+ [Local Disk]  [Vector DB]  [MCP Servers]
+     (Swap)      (Search)     (External)
+```
 
 ---
 
@@ -20,17 +35,17 @@ python3 src/cpos/demo_core.py
 ================================================
    CONTEXT POINTER OS v0.1 - Research Prototype
 ================================================
---- [BOOTLOADER] Starting Cognitive Sequence ---
-[BOOT] Step 1: >MEM:LOAD #ctx7 !9  (Runtime State)
-[BOOT] Step 2: >MEM:LOAD #ctx20 !9 (AI Persona)
+--- [BOOTLOADER] Starting Runtime Sequence ---
+[BOOT] Step 1: >MEM:LOAD #ctx7 !9  (System State)
+[BOOT] Step 2: >MEM:LOAD #ctx20 !9 (Agent Identity)
 --- [BOOTLOADER] Sequence Completed Successfully ---
 
 [Scenario: Rapid access triggers Heat Management]
 Final Identity Load Priority: 5 (Throttled by Kernel)
 
 [Scenario: Injecting Instability (Watchdog Test)]
---- [WATCHDOG IRQ] ANOMALOUS STATE DETECTED ---
---- [WATCHDOG] Forced Reset Initialized ---
+--- [WATCHDOG IRQ] SYSTEM ANOMALY DETECTED ---
+--- [WATCHDOG] Forced Context Reset Initialized ---
 System Status after Watchdog IRQ: Stable (corruption=0.0)
 ```
 
@@ -42,7 +57,7 @@ System Status after Watchdog IRQ: Stable (corruption=0.0)
 Pointers are lightweight references to memory. They allow the agent to keep its prompt clean while retaining the ability to "recall" specific data on demand via the Registry.
 
 ### 💾 Cognitive RAM & Paging
-- **Active Contexts**: Only specific pointers occupy the LLM's immediate prompt.
+- **Active Contexts**: Only specific pointers occupy the LLM's immediate prompt space.
 - **Homeostasis**: The kernel automatically summarizes or swaps unused pointers to disk when context limits are reached.
 
 ### 📊 Runtime Monitoring & Watchdog
