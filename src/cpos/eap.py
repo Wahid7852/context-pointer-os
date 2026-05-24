@@ -40,6 +40,8 @@ class EAPParser:
         'FUSE': 'fuse',
         'SYNTH': 'synth',
         'SWARM': 'swarm',
+        'CONSENSUS': 'consensus',
+        'REINCARNATE': 'reincarnate',
         'GC': 'gc',
         'LS': 'ls',
         'PS': 'ps',

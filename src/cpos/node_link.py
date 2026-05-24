@@ -160,3 +160,20 @@ class NodeLink:
             self.kernel.registry.invalidate(ctx_id, f"Remote Invalidation from {sender_addr}: {reason}", skip_broadcast_addr=sender_addr)
             # Also unload from RAM if active
             self.kernel.store.unload(ctx_id)
+
+    def send_reincarnation(self, target_addr: str):
+        """[CPOS v6.0] Transfers the node's entire state to a peer."""
+        if target_addr not in self.peers or not self.auth_nodes.get(target_addr):
+            return False
+        
+        peer = self.peers[target_addr]
+        print(f"--- [REINCARNATION] Initiating transfer from {self.full_address} to {target_addr} ---")
+        state = self.kernel.export_state()
+        return peer._handle_reincarnation_arrival(self.full_address, state)
+
+    def _handle_reincarnation_arrival(self, sender_addr: str, state: dict) -> bool:
+        """Handles an incoming reincarnation packet."""
+        if not self.kernel: return False
+        print(f"--- [REINCARNATION] Receiving cognitive soul from {sender_addr} ---")
+        self.kernel.restore_from_state(state)
+        return True

@@ -60,3 +60,32 @@ class CPOS:
             for agent, role_val in data["acl"]["roles"].items():
                 self.acl.set_role(agent, Role(role_val))
         print(f"--- [KERNEL] System restored from {snapshot_path} ---")
+
+    def export_state(self) -> dict:
+        """[CPOS v6.0] Serializes the entire cognitive state for reincarnation."""
+        return {
+            "registry": [obj.dict() for obj in self.registry.registry.values()],
+            "history": self.scheduler.cognitive_history,
+            "transition_matrix": self.scheduler.transition_matrix,
+            "current_persona": self.scheduler.current_persona,
+            "acl_roles": {k: int(v) for k, v in self.acl.agent_roles.items()},
+            "node_id": self.node.node_id,
+            "domain": self.node.domain
+        }
+
+    def restore_from_state(self, state: dict):
+        """[CPOS v6.0] Restores cognitive state from a reincarnation packet."""
+        # 1. Restore Registry
+        for item in state.get("registry", []):
+            self.registry.register(ContextObject(**item))
+        
+        # 2. Restore Scheduler state
+        self.scheduler.cognitive_history = state.get("history", [])
+        self.scheduler.transition_matrix = state.get("transition_matrix", {})
+        self.scheduler.current_persona = state.get("current_persona")
+        
+        # 3. Restore ACL
+        for agent, role_val in state.get("acl_roles", {}).items():
+            self.acl.set_role(agent, Role(role_val))
+            
+        print(f"--- [KERNEL] Reincarnation Complete: Node restored from {state.get('node_id')} ---")

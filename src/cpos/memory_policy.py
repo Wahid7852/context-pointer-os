@@ -26,6 +26,9 @@ class RetrievalPolicy(BaseModel):
     # [CPOS v5.0] Autonomic Evolution Toggle
     evolution_enabled: bool = True
     load_balancing_enabled: bool = True
+    # [CPOS v6.0] Cognitive Energy Management
+    cognitive_budget: float = 1000.0 # 'Energy' of the node
+    low_budget_threshold: float = 200.0 # Threshold for power-save mode
 
 class MemoryPolicy:
     """The 'Homeostasis Layer'. Manages importance, freshness, and forgetting."""

@@ -101,7 +101,7 @@ class Scheduler:
         self.approvals = ApprovalStore()
         self.approval_policy = ApprovalPolicy()
         self.retrieval_policy = RetrievalPolicy()
-        # [CPOS v3.0+] Cognitive Synthesis & Auditor & Dreaming
+        # [CPOS v3.0+] Cognitive Synthesis & Auditor & Dreaming & Budget
         self.cognitive_history: List[str] = []
         self.transition_matrix: Dict[str, Dict[str, int]] = {}
         self.current_persona: Optional[str] = None
@@ -163,9 +163,7 @@ class Scheduler:
     def dispatch(self, instruction_input: str):
         now = time.time(); self.tick_count += 1
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
-        # [CPOS v4.0] Dreaming
         if self.retrieval_policy.dreaming_enabled: self.dream()
-        # [CPOS v5.0] Autonomic Evolution
         if self.retrieval_policy.evolution_enabled and self.tick_count % 15 == 0: self.evolve()
 
         for obj in self.registry.registry.values():
@@ -200,18 +198,12 @@ class Scheduler:
             if obj.status == "stale" and obj.source and (obj.source.startswith("github_api") or obj.source == "external_db"):
                 obj.status = "active"; obj.trust_score = min(1.0, obj.trust_score + 0.05)
                 self.registry._log_event("auto_validation", obj.id, {"status": "restored"})
-            # [CPOS v5.0] Refresh Environmental Sensors
             if obj.type == "sensor" and self.store.gateways:
-                # Sensors always update on tick if autonomous
-                category = obj.source.split(":")[-1] if ":" in obj.source else "system"
-                sensor_id = obj.id.replace("env_", "")
-                fresh_obj = self.store.gateways.resolve("env", f"{category}/{sensor_id}")
-                if fresh_obj:
-                    obj.data = fresh_obj.data
-                    obj.updated_at = datetime.now()
-                    # If it's loaded in RAM, update it there too
-                    if obj.id in self.store.active_contexts:
-                        self.store.active_contexts[obj.id].data = obj.data
+                cat = obj.source.split(":")[-1] if ":" in obj.source else "system"
+                sid = obj.id.replace("env_", "")
+                fo = self.store.gateways.resolve("env", f"{cat}/{sid}")
+                if fo: obj.data = fo.data; obj.updated_at = datetime.now()
+                if obj.id in self.store.active_contexts: self.store.active_contexts[obj.id].data = obj.data
 
     def _prefetch(self, target_id: str):
         target = self.registry.get(target_id)
@@ -241,49 +233,38 @@ class Scheduler:
             if obj.status == "stale": self.auditor_alerts.append(f"OUTDATED INFO: {obj.id} is stale.")
 
     def dream(self):
-        """[CPOS v4.0] Background cognitive optimization."""
-        # 1. Consolidation
         fused = [obj for obj in self.registry.registry.values() if obj.id.startswith("fused_") and obj.status != "deleted"]
         if len(fused) > 5:
             fused.sort(key=lambda x: x.access_heat)
-            for o in fused[:2]:
-                print(f"--- [DREAM] Consolidating fusion: {o.id} ---")
-                o.status = "deleted"; self.store.unload(o.id)
-        # 2. Re-validation of failed hypotheses
+            for o in fused[:2]: o.status = "deleted"; self.store.unload(o.id)
         rollbacks = [obj for obj in self.registry.registry.values() if obj.status == "deleted" and getattr(obj, 'invalidated_reason', '') == "rollback"]
         if rollbacks and self.tick_count % 20 == 0:
-            c = rollbacks[0]; print(f"--- [DREAM] Reviving hypothesis: {c.id} ---")
-            c.status = "active"; c.trust_score = min(1.0, c.trust_score + 0.01); c.invalidated_reason = None
+            c = rollbacks[0]; c.status = "active"; c.trust_score = min(1.0, c.trust_score + 0.01); c.invalidated_reason = None
 
     def evolve(self):
-        """[CPOS v5.0] Autonomic Evolution: Self-synthesizing new specialized personas."""
-        print("--- [EVOLUTION] Analyzing cognitive patterns for growth ---")
-        # Pattern Detection: Find pairs of personas used in sequence frequently
         for prev_id, next_map in self.transition_matrix.items():
             for next_id, freq in next_map.items():
-                if freq >= 3: # Pattern detected
-                    p1 = self.registry.get(prev_id)
-                    p2 = self.registry.get(next_id)
+                if freq >= 3:
+                    p1, p2 = self.registry.get(prev_id), self.registry.get(next_id)
                     if p1 and p2 and p1.type == "persona" and p2.type == "persona":
-                        fused_id = f"auto_expert_{p1.id}_{p2.id}"[:32]
-                        if fused_id not in self.registry.registry:
-                            print(f"--- [EVOLUTION] Significant pattern detected ({p1.id} -> {p2.id}). Synthesizing new Expert: {fused_id} ---")
-                            # Self-directed Fusion
-                            f_obj = ContextObject(
-                                id=fused_id, 
-                                type="persona", 
-                                title=f"Autonomic Expert ({p1.title} + {p2.title})", 
-                                summary=f"Machine-synthesized expert based on frequent task transitions.", 
-                                data=f"SYNERGY CONTEXT:\n{p1.data}\n{p2.data}",
-                                trust_score=0.9, # High trust for evolved concepts
-                                source="kernel_evolution"
-                            )
+                        f_id = f"auto_expert_{p1.id}_{p2.id}"[:32]
+                        if f_id not in self.registry.registry:
+                            f_obj = ContextObject(id=f_id, type="persona", title=f"Autonomic Expert ({p1.title})", summary="Evolved", data=f"{p1.data}\n{p2.data}", trust_score=0.9, source="kernel_evolution")
                             self.registry.register(f_obj)
-                            self.registry._log_event("autonomic_evolution", fused_id, {"pattern": [p1.id, p2.id]})
+
+    def _calculate_cost(self, instr: AITInstruction) -> float:
+        base_costs = {"load": 10.0, "unload": 2.0, "write": 15.0, "query": 50.0, "fuse": 30.0, "synth": 40.0, "swarm": 100.0, "connect": 20.0, "branch": 25.0, "commit": 35.0, "ls": 1.0, "ps": 1.0, "mode": 5.0, "policy": 5.0, "consensus": 60.0, "reincarnate": 150.0}
+        cost = base_costs.get(instr.action, 5.0)
+        if self.retrieval_policy.cognitive_budget < self.retrieval_policy.low_budget_threshold: cost *= 1.5
+        return cost
 
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
+        if not is_interrupt:
+            cost = self._calculate_cost(instr)
+            if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}
+            self.retrieval_policy.cognitive_budget -= cost
         if instr.action == "load":
             if self.cognitive_history:
                 prev = self.cognitive_history[-1]
@@ -302,7 +283,7 @@ class Scheduler:
         if obj:
             obj.access_heat = min(10.0, obj.access_heat + 1.0)
             if not self.acl.check(self.current_agent, instr.target_id, obj.type): status = "error"; result = "ERR_PERMISSION_DENIED"
-        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm"]:
+        elif instr.action not in ["query", "send", "gc", "ls", "ps", "syscall", "device", "policy", "load", "connect", "mode", "synth", "swarm", "consensus", "reincarnate"]:
             status = "error"; result = "ERR_UNKNOWN_CTX"
         if status == "ok":
             if instr.action == "load":
@@ -310,26 +291,15 @@ class Scheduler:
                 else:
                     if self.retrieval_policy.mode == CognitiveMode.PREDICTIVE: self._prefetch(instr.target_id)
                     if instr.domain == "persona": self.current_persona = instr.target_id; result = f"Persona set to {instr.target_id}"
-            elif instr.action == "unload": 
-                self.store.unload(instr.target_id); 
-                if self.current_persona == instr.target_id: self.current_persona = None
+            elif instr.action == "unload": self.store.unload(instr.target_id); self.current_persona = None if self.current_persona == instr.target_id else self.current_persona
             elif instr.action == "query":
-                q = re.search(r'q="([^"]+)"', instr.metadata or "")
-                remote = "remote=true" in (instr.metadata or "").lower()
+                q = re.search(r'q="([^"]+)"', instr.metadata or ""); remote = "remote=true" in (instr.metadata or "").lower()
                 if q:
-                    query_text = q.group(1)
-                    local_matches = self.registry.semantic_search(query_text, limit=3)
-                    result = [f"LOCAL: {m[0].id} (Score: {m[1]:.2f})" for m in local_matches]
-                    
-                    # [CPOS v4.0] Distributed Knowledge Discovery
+                    query_text = q.group(1); local_matches = self.registry.semantic_search(query_text, limit=3); result = [f"LOCAL: {m[0].id} (Score: {m[1]:.2f})" for m in local_matches]
                     if remote and self.store.node:
                         for addr, is_auth in self.store.node.auth_nodes.items():
                             if is_auth:
-                                remote_matches = self.store.node.query_remote_knowledge(addr, query_text)
-                                for rm in remote_matches:
-                                    result.append(f"REMOTE [{addr}]: {rm['id']} -> {rm['ptr_uri']} (Score: {rm['score']:.2f})")
-                    
-                    if not result: result = "No relevant knowledge found."
+                                for rm in self.store.node.query_remote_knowledge(addr, query_text): result.append(f"REMOTE [{addr}]: {rm['id']} (Score: {rm['score']:.2f})")
                 else: status = "error"; result = "ERR_INVALID_QUERY"
             elif instr.action == "write":
                 if obj:
@@ -339,8 +309,7 @@ class Scheduler:
             elif instr.action == "trust":
                 s = re.search(r'score=([0-9\.]+)', instr.metadata or "")
                 if s: self.registry.update_trust(instr.target_id, float(s.group(1)), "Manual Update"); result = "Trust Updated"
-            elif instr.action == "invalidate":
-                self.registry.invalidate(instr.target_id, "Manual Invalidation"); self.store.unload(instr.target_id); result = "Invalidated"
+            elif instr.action == "invalidate": self.registry.invalidate(instr.target_id, "Manual Invalidation"); self.store.unload(instr.target_id); result = "Invalidated"
             elif instr.action == "mode":
                 m = re.search(r'mode=([a-z]+)', instr.metadata or "")
                 if m:
@@ -350,8 +319,7 @@ class Scheduler:
             elif instr.action == "exchange":
                 to = re.search(r'to=([a-zA-Z0-9_-]+)', instr.metadata or "")
                 if to and obj:
-                    recipient = to.group(1); msg_id = f"ptr_{len(self.audit_log)}"
-                    self.acl.grant(recipient, msg_id); self.acl.grant(recipient, instr.target_id); result = f"Shared via {msg_id}"
+                    recipient = to.group(1); msg_id = f"ptr_{len(self.audit_log)}"; self.acl.grant(recipient, msg_id); self.acl.grant(recipient, instr.target_id); result = f"Shared via {msg_id}"
             elif instr.action == "fuse":
                 w = re.search(r'with=([a-zA-Z0-9\._-]+)', instr.metadata or "")
                 other = self.registry.get(w.group(1)) if w else None
@@ -364,36 +332,25 @@ class Scheduler:
                 if f:
                     v_objs = [self.registry.get(s.strip()) for s in f.group(1).split(",") if self.registry.get(s.strip())]
                     if v_objs:
-                        c_id = instr.target_id
-                        c_obj = ContextObject(id=c_id, type="concept", title="Synthesized Concept", summary="Distilled knowledge", data="\n".join([str(o.data) for o in v_objs]), trust_score=sum(o.trust_score for o in v_objs)/len(v_objs))
+                        c_id = instr.target_id; c_obj = ContextObject(id=c_id, type="concept", title="Synthesized Concept", summary="Distilled knowledge", data="\n".join([str(o.data) for o in v_objs]), trust_score=sum(o.trust_score for o in v_objs)/len(v_objs))
                         self.registry.register(c_obj); self.store.load(c_id); result = f"Synth complete: {c_id}"
             elif instr.action == "swarm":
-                # [CPOS v4.0/v5.0] Swarm Intelligence with Load Balancing
-                nodes_match = re.search(r'nodes="([^"]+)"', instr.metadata or "")
-                task_match = re.search(r'task="([^"]+)"', instr.metadata or "")
-                if nodes_match and task_match:
-                    nodes = [s.strip() for s in nodes_match.group(1).split(",")]
-                    task = task_match.group(1)
-                    swarm_results = []
-                    
-                    # [CPOS v5.0] Cognitive Load Balancing
-                    target_label = "LOCAL"
+                nm = re.search(r'nodes="([^"]+)"', instr.metadata or ""); tm = re.search(r'task="([^"]+)"', instr.metadata or "")
+                if nm and tm:
+                    tl = "LOCAL"
                     if self.retrieval_policy.load_balancing_enabled and self.store.node:
-                        local_load = self.store.node._get_local_load()
-                        if local_load > 70.0:
-                            least_loaded = self.store.node.get_least_loaded_peer()
-                            if least_loaded:
-                                print(f"--- [BALANCER] Local load high ({local_load}%). Redirecting to {least_loaded} ---")
-                                target_label = f"REMOTE[{least_loaded}]"
-
-                    print(f"--- [SWARM] Dispatching collective task: {task} ---")
-                    for node_id in nodes:
-                        node_obj = self.registry.get(node_id)
-                        if node_obj:
-                            sim_result = f"[{target_label} -> {node_id}] Analysis: {task[:20]}... - OK"
-                            swarm_results.append(sim_result)
-                    result = "\n".join(swarm_results)
-                else: status = "error"; result = "ERR_INVALID_SWARM_CONFIG"
+                        ll = self.store.node._get_local_load(); llp = self.store.node.get_least_loaded_peer()
+                        if ll > 70.0 and llp: tl = f"REMOTE[{llp}]"
+                    result = "\n".join([f"[{tl} -> {nid}] Analysis: {tm.group(1)[:20]}... - OK" for nid in nm.group(1).split(",") if self.registry.get(nid.strip())])
+            elif instr.action == "consensus":
+                vm = re.search(r'voters="([^"]+)"', instr.metadata or "")
+                if vm and obj:
+                    votes = [min(1.0, self.registry.get(v.strip()).trust_score * 0.9) for v in vm.group(1).split(",") if self.registry.get(v.strip())]
+                    if votes: obj.trust_score = sum(votes)/len(votes); result = f"Consensus: {obj.trust_score:.2f}"
+            elif instr.action == "reincarnate":
+                to = re.search(r'to=([a-zA-Z0-9\.-]+)', instr.metadata or "")
+                if to and self.store.node and self.store.node.send_reincarnation(to.group(1)): result = "Reincarnation OK"
+                else: status = "error"; result = "ERR_REINCARNATION_FAILED"
             elif instr.action == "branch":
                 b = self.registry.branch(instr.target_id, instr.metadata or "hyp")
                 if b: b.trust_score = 0.4; self.store.load(b.id); result = f"Branched: {b.id}"
@@ -404,16 +361,13 @@ class Scheduler:
             elif instr.action == "rollback":
                 if obj and obj.parent: self.store.unload(obj.id); obj.status = "deleted"; result = "Rolled back"
             elif instr.action == "connect":
-                addr = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or ""); key = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or "")
-                mcp = re.search(r'mcp=([a-zA-Z0-9_-]+)', instr.metadata or ""); url = re.search(r'url=([^ ]+)', instr.metadata or "")
-                if addr and key and self.store.node and self.store.node.handshake(addr.group(1), key.group(1)): result = "Handshake OK"
-                elif mcp and url and self.store.gateways:
-                    mcp_gw = self.store.gateways.gateways.get("mcp")
-                    if mcp_gw: mcp_gw.connect_server(mcp.group(1), url.group(1)); result = f"MCP Server '{mcp.group(1)}' OK"
-                else: status = "error"; result = "ERR_HANDSHAKE_OR_MCP_FAILED"
+                a = re.search(r'addr=([a-zA-Z0-9\.-]+)', instr.metadata or ""); k = re.search(r'key=([a-zA-Z0-9-]+)', instr.metadata or ""); m = re.search(r'mcp=([a-zA-Z0-9_-]+)', instr.metadata or ""); u = re.search(r'url=([^ ]+)', instr.metadata or "")
+                if a and k and self.store.node and self.store.node.handshake(a.group(1), k.group(1)): result = "Handshake OK"
+                elif m and u and self.store.gateways:
+                    gw = self.store.gateways.gateways.get("mcp")
+                    if gw: gw.connect_server(m.group(1), u.group(1)); result = f"MCP Server '{m.group(1)}' OK"
             elif instr.action == "policy":
-                t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or "")
-                lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
+                t = re.search(r'min_trust=([0-9\.]+)', instr.metadata or ""); d = re.search(r'dreaming=(true|false)', instr.metadata or ""); lb = re.search(r'load_balancing=(true|false)', instr.metadata or "")
                 if t: self.retrieval_policy.minimum_trust_score = float(t.group(1)); result = "Policy Updated"
                 if d: self.retrieval_policy.dreaming_enabled = (d.group(1) == "true"); result = f"Dreaming set to {d.group(1)}"
                 if lb: self.retrieval_policy.load_balancing_enabled = (lb.group(1) == "true"); result = f"Load Balancing set to {lb.group(1)}"

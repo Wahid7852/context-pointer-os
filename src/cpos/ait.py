@@ -48,6 +48,8 @@ class AITCodec:
         '8': 'fuse',
         '9': 'synth',
         '7': 'swarm',
+        'd': 'consensus',
+        '4': 'reincarnate',
         'v': 'device',
         'k': 'lock',
         'n': 'unlock'
