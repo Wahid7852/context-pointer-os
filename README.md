@@ -83,6 +83,14 @@ Real-time monitoring of agent "stability" metrics. The **Kernel Watchdog** can t
 ### 🔐 Protection Layer (ACL)
 Role-based access control for memory pointers, preventing unauthorized access or tampering by sub-processes or guest agents.
 
+### 🛡️ Security & Integrity (Omega Intelligence)
+CPOS incorporates the **AIT Firewall v10.0**, providing defense-in-depth against:
+- **Prompt Injection & Trust Laundering**: Mathematical Trust Ceilings and Decay.
+- **Psychological Engineering**: Autonomous Persona Shift (Cold Mode).
+- **Temporal Vulnerabilities**: Hybrid time/tick-based memory expiration.
+
+See the [Security Analysis v10.0](docs/SECURITY_ANALYSIS_v10.md) for full technical details.
+
 ---
 
 ## 🛠️ Instruction Sets

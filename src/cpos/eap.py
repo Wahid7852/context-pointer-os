@@ -82,8 +82,12 @@ class EAPParser:
                     target_id = id_raw
                 else:
                     target_id = id_raw # Fallback
-            except:
+            except Exception as e:
+                # [SECURITY] Log parsing failure and fallback to raw ID to prevent injection
+                # In a production environment, this should trigger a security warning.
                 target_id = id_raw
+                # logger.warning(f"Failed to parse remote pointer URI: {e}")
+
         else:
             # Smart prefixing: If it doesn't look like a special ID (ptr_, msg_, ptr://) 
             # and doesn't already have 'ctx', add 'ctx' for convenience.

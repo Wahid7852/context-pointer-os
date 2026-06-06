@@ -87,3 +87,23 @@ class MemoryPolicy:
             else:
                 self.store.unload(ctx_id)
         return targets
+
+    def process_decay(self, decay_threshold: float = 60.0):
+        """[CPOS v12.0] Automatically unloads sensitive secrets after a period of inactivity."""
+        from datetime import datetime
+        now = datetime.now().timestamp()
+        
+        for obj in list(self.registry.registry.values()):
+            # 1. Time-based decay for sensitive info
+            if obj.sensitivity_level in ["private", "restricted"] and obj.state.loaded:
+                inactive_time = now - obj.last_accessed
+                if inactive_time > decay_threshold:
+                    print(f"--- [DECAY] Secret {obj.id} expired due to inactivity ({inactive_time:.1f}s) ---")
+                    self.store.unload(obj.id)
+            
+            # 2. Global freshness decay
+            if obj.state.loaded:
+                obj.freshness = max(0.0, obj.freshness - obj.decay_rate)
+                if obj.freshness < 0.1:
+                    # Stale context - demote
+                    obj.status = "stale"

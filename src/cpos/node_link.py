@@ -177,3 +177,17 @@ class NodeLink:
         print(f"--- [REINCARNATION] Receiving cognitive soul from {sender_addr} ---")
         self.kernel.restore_from_state(state)
         return True
+
+    def broadcast_immunity(self, genes: list):
+        """[CPOS v12.0] Notifies all peers of new evolved defense patterns."""
+        for addr, peer in self.peers.items():
+            if self.auth_nodes.get(addr):
+                 peer._handle_immunity_arrival(self.full_address, genes)
+
+    def _handle_immunity_arrival(self, sender_addr: str, genes: list):
+        """Reacts to remote immunity sync."""
+        if not self.kernel: return
+        print(f"--- [SWARM] Received {len(genes)} genetic rules from {sender_addr} ---")
+        # Direct integration with AIT Firewall through the kernel
+        if hasattr(self.kernel, 'firewall'):
+             self.kernel.firewall.sanitizer.genetic_shield.import_genes(genes)

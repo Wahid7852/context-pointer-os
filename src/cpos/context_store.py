@@ -157,7 +157,9 @@ class ContextStore:
 
     def unload(self, ctx_id: str):
         if ctx_id in self.active_contexts:
-            del self.active_contexts[ctx_id]
+            obj = self.active_contexts.pop(ctx_id)
+            obj.state.loaded = False
+            print(f"--- [STORE] Context {ctx_id} unloaded from RAM ---")
 
     def get_active_content(self) -> str:
         """Serializes all active contexts for the LLM prompt."""

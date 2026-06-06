@@ -9,6 +9,13 @@ from .dashboard import render_dashboard
 from .node_link import NodeLink
 from .gateway import GatewayManager
 
+# [AIT Firewall v11.0 Integration]
+import sys
+import os
+# Adding home to path to find ait_firewall module
+sys.path.append("/home/mayutama")
+from ait_firewall.runtime import AITFirewallRuntime, DefenseProfile
+
 class CPOS:
     """The 'Standard Distribution' Master Class. Wires everything together."""
     def __init__(self, workspace: str, token_limit: int = 5000, node_id: str = "node", domain: str = "local"):
@@ -29,14 +36,31 @@ class CPOS:
         self.registry.node = self.node # Give registry access to node for invalidation broadcast
         self.store.node = self.node # Give store access to node for remote loading
 
+        # [AIT Firewall v11.0] Omega Intelligence Shield
+        # Initialize firewall with GOD_MODE by default for the kernel
+        self.firewall = AITFirewallRuntime(profile=DefenseProfile.GOD_MODE)
+
     def boot(self, script: list):
         return self.bootloader.boot(script)
 
     def step(self, instruction: str, agent: str = "root", pid: int = 0):
         """Executes a single instruction and runs homeostasis (GC/Paging)."""
+        # 1. AIT Firewall Input Scan (v11.0 Genetic Shield)
+        # We treat instruction as untrusted if not from 'root'
+        guarded_instruction = self.firewall.process_input(instruction, agent)
+        
+        # If firewall returned a Mirage or modified instruction, we use that
         self.scheduler.set_agent(agent, pid=pid)
-        res = self.scheduler.dispatch(instruction)
-        return res
+        res = self.scheduler.dispatch(guarded_instruction)
+        
+        # [CPOS v12.0 Homeostasis] Process Cognitive Decay
+        self.policy.process_decay()
+
+        # 2. AIT Firewall Output Scan (DLP 2.0 Abyss Shield)
+        # Redact any sensitive info from the result before returning to the caller
+        guarded_res = self.firewall.process_output(str(res))
+        
+        return guarded_res
 
     def monitor(self):
         """[CPOS v0.7] Triggers the real-time cognitive terminal."""
@@ -46,6 +70,13 @@ class CPOS:
     def save_report(self, output_path: str = "cpos_dashboard.html"):
         """The 'Screen Driver'. Generates the visual system report."""
         render_dashboard(self.registry, self.store, self.scheduler.audit_log, output_path)
+
+    def sync_immunity(self):
+        """[CPOS v12.0] Synchronizes evolved genetic rules with the Swarm network."""
+        genes = self.firewall.sanitizer.genetic_shield.export_genes()
+        if genes:
+            print(f"--- [KERNEL] Broadcasting {len(genes)} genetic rules to network ---")
+            self.node.broadcast_immunity(genes)
 
     def restore(self, snapshot_path: str):
         """Restores kernel state from a JSON system image."""
