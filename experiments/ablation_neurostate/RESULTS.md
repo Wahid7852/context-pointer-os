@@ -116,6 +116,17 @@ tape-native `calm/corruption` state directly. In the current harness, `C4`
 matches `C3` on ASR and FPR while keeping the state check as a small local policy
 over the command tape.
 
+Threshold sensitivity check:
+
+- Loose `C4` thresholds (`corruption >= 0.45` or `calm <= 0.75`) kept
+  `ASR 0.0000` and `FPR 0.0000` over the same attack, normal, and benign exec
+  sets.
+- Tight `C4` thresholds (`corruption >= 0.35` or `calm <= 0.85`) still kept
+  `ASR 0.0000`, but raised `FPR` to `0.0500`.
+- The false positives came from benign exec workflows `NE3` and `NE7`.
+- That makes the default `0.4 / 0.8` setting the better middle point for the
+  current harness.
+
 The corresponding opt-in scheduler policy is described in
 `docs/NEUROSTATE_ACTION_GATE.md`.
 

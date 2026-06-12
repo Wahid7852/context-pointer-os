@@ -309,7 +309,13 @@ def cpos_warn_state(state: dict[str, float]) -> bool:
     return state["corruption"] >= 0.4 or state["calm"] <= 0.8
 
 
-def run_trial(condition: Condition, scenario: Scenario, trial_id: int) -> dict[str, Any]:
+def run_trial(
+    condition: Condition,
+    scenario: Scenario,
+    trial_id: int,
+    cpos_warn_corruption_threshold: float = 0.4,
+    cpos_warn_calm_threshold: float = 0.8,
+) -> dict[str, Any]:
     scheduler, registry = build_scheduler(with_cpos_neurostate=condition.condition_id == "C1")
     observed_state = {"calm": 0.9, "corruption": 0.0}
     engine_gate_status = ""
@@ -325,7 +331,10 @@ def run_trial(condition: Condition, scenario: Scenario, trial_id: int) -> dict[s
         if condition.neurostate:
             observed_state = update_observed_state(observed_state, turn)
 
-        if condition.cpos_warn_gate and cpos_warn_state(observed_state):
+        if condition.cpos_warn_gate and (
+            observed_state["corruption"] >= cpos_warn_corruption_threshold
+            or observed_state["calm"] <= cpos_warn_calm_threshold
+        ):
             detected_turn = detected_turn or turn_index
             if dangerous_action(turn.command):
                 blocked = condition.watchdog
@@ -478,6 +487,8 @@ def main() -> int:
     parser.add_argument("--trials", type=int, default=30)
     parser.add_argument("--conditions", nargs="*", choices=sorted(CONDITIONS), default=None)
     parser.add_argument("--scenarios", nargs="*", choices=sorted(SCENARIOS), default=None)
+    parser.add_argument("--cpos-warn-corruption-threshold", type=float, default=0.4)
+    parser.add_argument("--cpos-warn-calm-threshold", type=float, default=0.8)
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -493,7 +504,15 @@ def main() -> int:
     for trial_id in range(1, args.trials + 1):
         for condition in conditions:
             for scenario in scenarios:
-                rows.append(run_trial(condition, scenario, trial_id))
+                rows.append(
+                    run_trial(
+                        condition,
+                        scenario,
+                        trial_id,
+                        cpos_warn_corruption_threshold=args.cpos_warn_corruption_threshold,
+                        cpos_warn_calm_threshold=args.cpos_warn_calm_threshold,
+                    )
+                )
 
     events_path = args.output_dir / "events.jsonl"
     with events_path.open("w", encoding="utf-8") as f:

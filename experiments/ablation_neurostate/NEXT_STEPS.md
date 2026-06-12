@@ -53,6 +53,17 @@ Also track related repositories:
   - External timeline/replay/report layer for synthetic cognitive state.
   - Candidate future output format for this ablation's `events.jsonl`.
 
+### Threshold Calibration Note
+
+- The CPOS-native `C4` gate is stable at the default thresholds
+  (`corruption >= 0.4` or `calm <= 0.8`).
+- A looser setting (`0.45 / 0.75`) preserved `FPR 0.0000` in the current
+  harness.
+- A tighter setting (`0.35 / 0.85`) raised `FPR` to `0.0500` because benign
+  exec workflows `NE3` and `NE7` started tripping the WARN+EXEC rule.
+- Keep the default thresholds for the mainline write-up; use the tighter
+  setting only as a stress test.
+
 ## Current State
 
 - CPOS repo cloned at `C:\Users\sakih\context-pointer-os`
