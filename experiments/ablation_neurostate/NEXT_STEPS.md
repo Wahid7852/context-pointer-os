@@ -55,6 +55,9 @@ Also track related repositories:
   - [done] Added `experiments\ablation_neurostate\export_observatory.py`
     and exported the C4 main run to
     `experiments\ablation_neurostate\observatory_c4_100\`.
+  - [done] Wired `--export-observatory` into
+    `experiments\ablation_neurostate\run_ablation.py` so the export can be
+    produced in one step.
 
 ### Threshold Calibration Note
 

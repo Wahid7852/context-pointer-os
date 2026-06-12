@@ -170,6 +170,8 @@ Observability export:
 
 - `experiments\ablation_neurostate\export_observatory.py` converts
   `events.jsonl` into an observatory-style timeline export.
+- `experiments\ablation_neurostate\run_ablation.py --export-observatory`
+  now runs the export as part of the ablation flow.
 - The current `C4` main run was exported to
   `experiments\ablation_neurostate\observatory_c4_100\`.
 - Output files:

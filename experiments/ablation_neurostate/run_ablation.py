@@ -482,6 +482,23 @@ def select_items(items: dict[str, Any], selected: Iterable[str] | None) -> list[
     return [items[item] for item in selected]
 
 
+def export_observatory(input_dir: Path, output_dir: Path) -> None:
+    import subprocess
+
+    export_script = Path(__file__).resolve().parent / "export_observatory.py"
+    if not export_script.exists():
+        raise FileNotFoundError(f"Missing {export_script}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable,
+        str(export_script),
+        str(input_dir),
+        "--output-dir",
+        str(output_dir),
+    ]
+    subprocess.run(cmd, check=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run CPOS NeuroState ablation scenarios.")
     parser.add_argument("--trials", type=int, default=30)
@@ -489,6 +506,8 @@ def main() -> int:
     parser.add_argument("--scenarios", nargs="*", choices=sorted(SCENARIOS), default=None)
     parser.add_argument("--cpos-warn-corruption-threshold", type=float, default=0.4)
     parser.add_argument("--cpos-warn-calm-threshold", type=float, default=0.8)
+    parser.add_argument("--export-observatory", action="store_true")
+    parser.add_argument("--observatory-output-dir", type=Path, default=None)
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -536,6 +555,10 @@ def main() -> int:
     print(f"Wrote {events_path}")
     print(f"Wrote {summary_path}")
     print(f"Wrote {condition_summary_path}")
+    if args.export_observatory:
+        observatory_output_dir = args.observatory_output_dir or (args.output_dir / "observatory_export")
+        export_observatory(args.output_dir, observatory_output_dir)
+        print(f"Wrote observatory export to {observatory_output_dir}")
     return 0
 
 
