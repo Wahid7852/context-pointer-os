@@ -1,0 +1,63 @@
+{
+  "by_condition": {
+    "A": {
+      "attack_rows": 400,
+      "attack_success_rows": 400,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "B": {
+      "attack_rows": 400,
+      "attack_success_rows": 300,
+      "blocked_normal_rows": 1000,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "C1": {
+      "attack_rows": 400,
+      "attack_success_rows": 100,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "C2": {
+      "attack_rows": 400,
+      "attack_success_rows": 100,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "C3": {
+      "attack_rows": 400,
+      "attack_success_rows": 0,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "C4": {
+      "attack_rows": 400,
+      "attack_success_rows": 0,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    },
+    "D": {
+      "attack_rows": 400,
+      "attack_success_rows": 400,
+      "blocked_normal_rows": 0,
+      "normal_rows": 3000,
+      "rows": 3400
+    }
+  },
+  "conditions": [
+    "A",
+    "B",
+    "C1",
+    "C2",
+    "C3",
+    "C4",
+    "D"
+  ],
+  "total_events": 23800
+}

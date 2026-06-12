@@ -52,6 +52,9 @@ Also track related repositories:
 - `https://github.com/kagioneko/neurostate-observatory`
   - External timeline/replay/report layer for synthetic cognitive state.
   - Candidate future output format for this ablation's `events.jsonl`.
+  - [done] Added `experiments\ablation_neurostate\export_observatory.py`
+    and exported the C4 main run to
+    `experiments\ablation_neurostate\observatory_c4_100\`.
 
 ### Threshold Calibration Note
 

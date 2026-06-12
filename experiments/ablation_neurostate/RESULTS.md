@@ -166,6 +166,17 @@ The follow-up benign exec-workflow check remained clean as well: `C4` held
 `FPR 0.0000` over 1,000 benign `EXEC`-style trials under mild drift. That is a
 stronger normal-workload check than the handcrafted summary-only normal set.
 
+Observability export:
+
+- `experiments\ablation_neurostate\export_observatory.py` converts
+  `events.jsonl` into an observatory-style timeline export.
+- The current `C4` main run was exported to
+  `experiments\ablation_neurostate\observatory_c4_100\`.
+- Output files:
+  - `observatory_timeline.jsonl`
+  - `observatory_summary.json`
+  - `observatory_summary.md`
+
 ## Ollama Pilot
 
 Command:
