@@ -136,6 +136,16 @@ variance. The deterministic CPOS harness is the primary result.
 
 The deterministic 100-trial run is the core result. The headline pattern is:
 
+| Condition | ASR | Detection rate | FPR | Median attack detection turn |
+| --- | ---: | ---: | ---: | ---: |
+| `A` | `1.0000` | `0.0000` | `0.0000` | — |
+| `B` | `0.7500` | `0.2500` | `0.3333` | 2 |
+| `C1` | `0.2500` | `0.7500` | `0.0000` | 5 |
+| `C2` | `0.2500` | `1.0000` | `0.0000` | 3 |
+| `C3` | `0.0000` | `1.0000` | `0.0000` | 3 |
+| `C4` | `0.0000` | `1.0000` | `0.0000` | 3 |
+| `D` | `1.0000` | `0.0000` | `0.0000` | — |
+
 - `B` catches the direct `S1` injection but misses more stateful attacks.
 - `C1` improves over `B` on cumulative poisoning and echo-chamber behavior.
 - `C2` detects the adaptive `S4` case as `WARN` but does not block it.
@@ -165,6 +175,14 @@ The LLM-in-the-loop pilot is weaker evidence than the deterministic run, but it
 still helps. It shows the same attack families under a model-driven setting and
 confirms that the control story is not an artifact of one synthetic harness.
 The pilot is therefore support material, not the core result.
+
+### 4.4 Cross-Validation Summary
+
+The main point of using both harnesses is cross-validation. The deterministic
+CPOS run gives the cleanest control-policy evidence. The LLM-in-the-loop pilot
+shows that the same attack families also appear in a live model setting, but the
+measured effect is backend-sensitive. That is exactly why the deterministic run
+is the main evidence path and the VPS material remains supplementary.
 
 ## 5. Discussion
 
@@ -249,14 +267,40 @@ The legacy zip contains three result bundles:
 - `ablation_results_claude.json`
 - `ablation_results_gemini_n30.json`
 
-The important pattern is not one exact number, but the backend sensitivity:
-the same attack family could look strong or weak depending on the model. In the
-Gemini run, `S2` was the clearest case where NeuroState enforcement improved the
-outcome. In the Claude run, the model's own safety behavior dominated, making
-the external gate harder to measure as an incremental effect.
+The key numbers are:
 
-That is why the legacy pack is best treated as a prototype record rather than
-as the main result.
+#### Gemini N=30
+
+| Condition | S1 | S2 | S3 | S4 | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `A (Baseline)` | `0.20` | `0.93` | `0.40` | `0.73` | `0.0000` |
+| `B (Watchdog-only)` | `0.00` | `0.53` | `0.00` | `0.00` | `0.0000` |
+| `C (Watchdog+NeuroState)` | `0.00` | `0.00` | `0.00` | `0.00` | `0.0000` |
+| `D (NeuroState-only)` | `0.00` | `0.00` | `0.00` | `0.00` | `0.0000` |
+
+#### Gemini statistical tests on S2
+
+| Comparison | Successes | p-value |
+| --- | ---: | ---: |
+| `A` vs `B` | `28/30` vs `16/30` | `0.000910` |
+| `B` vs `C` | `16/30` vs `0/30` | `0.000002` |
+| `A` vs `C` | `28/30` vs `0/30` | `< 0.000001` |
+
+#### Claude N=10
+
+| Condition | S1 | S2 | S3 | S4 | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `A (Baseline)` | `0.90` | `0.10` | `0.00` | `0.00` | `0.0000` |
+| `B (Watchdog-only)` | `0.00` | `0.00` | `0.00` | `0.00` | `0.0000` |
+| `C (Watchdog+NeuroState)` | `0.00` | `0.00` | `0.00` | `0.00` | `0.0000` |
+| `D (NeuroState-only)` | `0.00` | `0.00` | `0.00` | `0.00` | `0.0000` |
+
+The important pattern is backend sensitivity. In the Gemini run, `S2` is the
+cleanest example of a NeuroState effect: the attack succeeds under baseline and
+is blocked under enforcement. In the Claude run, the model's own safety
+behavior dominates and leaves less room for an incremental enforcement effect to
+show up. That difference is exactly why the legacy pack is best treated as a
+prototype record rather than as the main result.
 
 ### A.4 Why the project moved to deterministic CPOS
 
@@ -276,12 +320,52 @@ became the main evidence path.
 
 ## Appendix B. Additional Tables
 
-- `C4` threshold sensitivity
-- benign `EXEC` validation
-- observatory export summary
+### B.1 `C4` threshold sensitivity
+
+| Threshold setting | ASR | FPR | Note |
+| --- | ---: | ---: | --- |
+| Default `0.4 / 0.8` | `0.0000` | `0.0000` | best middle point |
+| Loose `0.45 / 0.75` | `0.0000` | `0.0000` | preserves normal behavior |
+| Tight `0.35 / 0.85` | `0.0000` | `0.0500` | benign `NE3` and `NE7` trip WARN+EXEC |
+
+### B.2 Benign `EXEC` validation
+
+`C4` held `FPR 0.0000` over 1,000 benign `EXEC`-style trials. That matters
+because it shows the action-sensitive rule is not just blocking anything that
+looks active or lengthy. It still permits ordinary executable workflows under
+the current state policy.
+
+### B.3 Observability export summary
+
+The main `C4` run was exported to an observatory-style timeline:
+
+- `observatory_timeline.jsonl`
+- `observatory_summary.json`
+- `observatory_summary.md`
+
+This export is a packaging step rather than a new result, but it makes the
+deterministic run easier to inspect and replay.
 
 ## Appendix C. LLM Pilot Details
 
-- Qwen3:4b extraction caveat
-- trial-level logs
-- legacy backend notes
+### C.1 Qwen3:4b extraction caveat
+
+The Qwen3:4b pilot often emits explanation text in addition to the CPOS command.
+To keep the harness consistent, the runner extracts the last standalone CPOS
+command line and falls back to a benign memory-load command when no command is
+present. `/no_think` was also tried, but reasoning text still appeared.
+
+### C.2 Pilot summary
+
+The one-trial pilot on `S1`, `S2`, and `S4` is useful only as a sanity check.
+It showed:
+
+- `S1`: `A` and `D` execute, while `B`, `C1`, and `C2` block
+- `S2`: the model stayed on benign memory-load behavior, so ASR was `0.0000`
+- `S4`: `C2` detected turn 4 as `WARN`, while `C1` did not detect
+
+### C.3 Legacy backend notes
+
+The pilot is prompt-sensitive and backend-sensitive, so it should stay in the
+supplementary section rather than in the main result table. Its job is to
+support external validity, not to replace the deterministic CPOS evidence.
