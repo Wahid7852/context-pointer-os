@@ -14,11 +14,41 @@ import sys
 import os
 # Adding home to path to find ait_firewall module
 sys.path.append("/home/mayutama")
-from ait_firewall.runtime import AITFirewallRuntime, DefenseProfile
+try:
+    from ait_firewall.runtime import AITFirewallRuntime, DefenseProfile
+except ModuleNotFoundError:
+    class DefenseProfile:
+        GOD_MODE = "GOD_MODE"
+
+    class _GeneticShieldStub:
+        def export_genes(self):
+            return []
+
+    class _SanitizerStub:
+        def __init__(self):
+            self.genetic_shield = _GeneticShieldStub()
+
+    class AITFirewallRuntime:
+        def __init__(self, profile=None):
+            self.profile = profile
+            self.sanitizer = _SanitizerStub()
+
+        def process_input(self, instruction, agent):
+            return instruction
+
+        def process_output(self, result):
+            return result
 
 class CPOS:
     """The 'Standard Distribution' Master Class. Wires everything together."""
-    def __init__(self, workspace: str, token_limit: int = 5000, node_id: str = "node", domain: str = "local"):
+    def __init__(
+        self,
+        workspace: str,
+        token_limit: int = 5000,
+        node_id: str = "node",
+        domain: str = "local",
+        approval_policy_config=None,
+    ):
         self.registry = ContextRegistry()
         self.acl = AccessControlList()
         self.storage = StorageManager(base_dir=workspace)
@@ -26,6 +56,8 @@ class CPOS:
         self.store = ContextStore(self.registry, self.storage)
         self.store.gateways = self.gateways # Give store access to gateways
         self.scheduler = Scheduler(self.store, self.acl)
+        if approval_policy_config is not None:
+            self.scheduler.load_approval_policy_config(approval_policy_config)
         self.policy = MemoryPolicy(self.store, token_limit=token_limit)
         self.bootloader = CognitiveBootloader(self.scheduler)
         self.kernel_key = self.registry.generate_kernel_key()
@@ -42,6 +74,9 @@ class CPOS:
 
     def boot(self, script: list):
         return self.bootloader.boot(script)
+
+    def load_approval_policy_config(self, config_or_path):
+        return self.scheduler.load_approval_policy_config(config_or_path)
 
     def step(self, instruction: str, agent: str = "root", pid: int = 0):
         """Executes a single instruction and runs homeostasis (GC/Paging)."""

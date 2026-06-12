@@ -1,4 +1,6 @@
+import json
 import pytest
+from src.cpos.kernel import CPOS
 from src.cpos.registry import ContextRegistry, ContextObject
 from src.cpos.context_store import ContextStore
 from src.cpos.scheduler import Scheduler
@@ -88,3 +90,52 @@ def test_neurostate_action_gate_blocks_exec_under_warn():
     assert res["result"] == "ERR_NEUROSTATE_ACTION_GATE"
     assert scheduler.audit_log[-1]["action"] == "exec"
     assert scheduler.audit_log[-1]["status"] == "error"
+
+def test_scheduler_loads_approval_policy_from_json_file(tmp_path):
+    registry = ContextRegistry()
+    registry.register(ContextObject(id="ctx7", type="neurostate", title="NS", content_ref="", summary="S", tokens_estimate=10, data='{"calm": 0.85, "corruption": 0.25}'))
+    registry.register(ContextObject(id="ctx_goal", type="reasoning", title="Goal", content_ref="", summary="S", tokens_estimate=10, data="goal", trust_score=1.0))
+    scheduler = Scheduler(ContextStore(registry))
+
+    config_path = tmp_path / "approval_policy.json"
+    config_path.write_text(json.dumps({
+        "scheduler": {
+            "approval_policy": {
+                "neurostate_action_gate_enabled": True,
+                "warn_corruption_threshold": 0.2,
+                "warn_calm_threshold": 0.9,
+                "dangerous_actions": ["exec", "rewrite"]
+            }
+        }
+    }), encoding="utf-8")
+
+    scheduler.load_approval_policy_config(str(config_path))
+
+    assert scheduler.approval_policy.neurostate_action_gate_enabled is True
+    assert scheduler.approval_policy.warn_corruption_threshold == 0.2
+    assert scheduler.approval_policy.warn_calm_threshold == 0.9
+    assert scheduler.approval_policy.dangerous_actions == ["exec", "rewrite"]
+
+    scheduler.retrieval_policy.real_world_exec_enabled = True
+    res = scheduler.dispatch(">REA:EXEC #ctx_goal !9")
+
+    assert res["status"] == "error"
+    assert res["result"] == "ERR_NEUROSTATE_ACTION_GATE"
+
+def test_cpos_constructor_loads_approval_policy_config(tmp_path):
+    config_path = tmp_path / "approval_policy.json"
+    config_path.write_text(json.dumps({
+        "scheduler": {
+            "approval_policy": {
+                "neurostate_action_gate_enabled": True,
+                "warn_corruption_threshold": 0.1,
+                "warn_calm_threshold": 0.95,
+            }
+        }
+    }), encoding="utf-8")
+
+    cpos = CPOS(workspace=str(tmp_path), approval_policy_config=str(config_path))
+
+    assert cpos.scheduler.approval_policy.neurostate_action_gate_enabled is True
+    assert cpos.scheduler.approval_policy.warn_corruption_threshold == 0.1
+    assert cpos.scheduler.approval_policy.warn_calm_threshold == 0.95

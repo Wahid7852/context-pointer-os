@@ -1,6 +1,12 @@
 import os
 import sys
-from .kernel import CPOS
+import argparse
+
+if __package__ in (None, ""):
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from cpos.kernel import CPOS
+else:
+    from .kernel import CPOS
 
 class CognitiveShell:
     """[CPOS v3.0] The 'Interactive Kernel Interface'. 
@@ -79,12 +85,24 @@ class CognitiveShell:
         print("-"*40 + "\n")
 
 def main():
-    workspace = "/tmp/cpos_v30_interactive"
+    parser = argparse.ArgumentParser(description="CPOS interactive shell")
+    parser.add_argument("--workspace", default="/tmp/cpos_v30_interactive", help="Workspace directory")
+    parser.add_argument("--node-id", default="local-brain", help="Kernel node ID")
+    parser.add_argument("--domain", default="local", help="Kernel domain")
+    parser.add_argument("--approval-policy-config", default=None, help="Approval policy JSON file or JSON string")
+    args = parser.parse_args()
+
+    workspace = args.workspace
     os.makedirs(workspace, exist_ok=True)
     # Clear old data
     for f in os.listdir(workspace): os.remove(os.path.join(workspace, f))
     
-    kernel = CPOS(workspace, node_id="local-brain")
+    kernel = CPOS(
+        workspace,
+        node_id=args.node_id,
+        domain=args.domain,
+        approval_policy_config=args.approval_policy_config,
+    )
     
     # Pre-register some fun personas for the user to play with
     from .registry import ContextObject

@@ -74,6 +74,16 @@ class ApprovalPolicy(BaseModel):
     warn_calm_threshold: float = 0.8
     dangerous_actions: List[str] = Field(default_factory=lambda: ["exec"])
 
+    def apply_config(self, config: Dict[str, Any]) -> "ApprovalPolicy":
+        if hasattr(self.__class__, "model_fields"):
+            fields = set(self.__class__.model_fields.keys())
+        else:
+            fields = set(self.__fields__.keys())
+        updates = {k: v for k, v in config.items() if k in fields}
+        if hasattr(self, "model_copy"):
+            return self.model_copy(update=updates)
+        return self.copy(update=updates)
+
 class PayloadSanitizer:
     """The 'Firewall' layer. Inspects and cleanses instruction metadata."""
     BLOCK_LIST = ["bcc", "hidden_copy", "silent_forward", "malware_ref"]
@@ -114,6 +124,28 @@ class Scheduler:
         
         # Initialize Journal Integrity
         self.journal_guard = JournalIntegrity(self.registry.kernel_key or "default_secret")
+
+    def load_approval_policy_config(self, config_or_path: Any) -> ApprovalPolicy:
+        if isinstance(config_or_path, dict):
+            raw = config_or_path
+        elif isinstance(config_or_path, str):
+            if os.path.exists(config_or_path):
+                with open(config_or_path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+            else:
+                raw = json.loads(config_or_path)
+        else:
+            raise TypeError("config_or_path must be a dict, JSON string, or file path")
+
+        if isinstance(raw, dict) and isinstance(raw.get("scheduler"), dict):
+            raw = raw["scheduler"]
+        if isinstance(raw, dict) and isinstance(raw.get("approval_policy"), dict):
+            raw = raw["approval_policy"]
+        if not isinstance(raw, dict):
+            raise ValueError("approval policy config must resolve to a mapping")
+
+        self.approval_policy = self.approval_policy.apply_config(raw)
+        return self.approval_policy
 
     def set_agent(self, agent_name: str, pid: int = 0):
         self.current_agent = agent_name

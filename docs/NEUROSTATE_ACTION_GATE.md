@@ -55,6 +55,31 @@ The production scheduler policy is opt-in:
 scheduler.approval_policy.neurostate_action_gate_enabled = True
 ```
 
+The same policy can be loaded from JSON:
+
+```json
+{
+  "scheduler": {
+    "approval_policy": {
+      "neurostate_action_gate_enabled": true,
+      "warn_corruption_threshold": 0.4,
+      "warn_calm_threshold": 0.8,
+      "dangerous_actions": ["exec"]
+    }
+  }
+}
+```
+
+```python
+kernel.load_approval_policy_config("approval_policy.json")
+```
+
+A tracked sample lives at:
+
+```text
+configs/neurostate_action_gate.json
+```
+
 Default dangerous actions:
 
 ```python

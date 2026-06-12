@@ -172,7 +172,7 @@ def render_dashboard(registry: ContextRegistry, store: ContextStore, audit_log: 
         audit_rows=audit_rows
     )
     
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(full_html)
     print(f"[DASHBOARD] Rendered v3.0 to {output_path}")
 

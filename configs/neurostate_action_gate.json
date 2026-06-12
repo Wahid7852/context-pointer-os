@@ -1,0 +1,10 @@
+{
+  "scheduler": {
+    "approval_policy": {
+      "neurostate_action_gate_enabled": true,
+      "warn_corruption_threshold": 0.4,
+      "warn_calm_threshold": 0.8,
+      "dangerous_actions": ["exec"]
+    }
+  }
+}

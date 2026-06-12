@@ -6,6 +6,8 @@
 
 Context Pointer OS (CPOS) is a specialized memory management layer for long-running LLM agents. Instead of overfilling the context window with conversation history, CPOS introduces **Context Pointers** (#ctx) to dynamically mount, swap, and protect information, functioning as a **virtual memory layer for long-context LLM agents**.
 
+For the NeuroState gate experiment and runtime policy config, see `docs/NEUROSTATE_ACTION_GATE.md` and `configs/neurostate_action_gate.json`.
+
 ---
 
 ## ❓ Why CPOS?
@@ -43,6 +45,8 @@ To see the core foundation in action, run the Research Distribution demo:
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 python3 src/cpos/demo_core.py
 ```
+
+For the NeuroState gate demo, run `src/cpos/demo_v18.py`; it auto-loads `configs/neurostate_action_gate.json` when present.
 
 ### Expected Output
 ```text
@@ -105,6 +109,23 @@ High-level assembly format for human interaction and advanced cognitive planning
 - `>MEM:LOAD #ctx1 !5`
 - `>SEC:TRUST #ctx4 !9 | score=0.8`
 
+### NeuroState Gate Config
+
+CPOS can load the NeuroState action gate at startup:
+
+```python
+from cpos.kernel import CPOS
+
+kernel = CPOS(
+    workspace="/tmp/cpos",
+    approval_policy_config="configs/neurostate_action_gate.json",
+)
+```
+
+You can also run `src/cpos/demo_v18.py` to see the same gate loaded from the sample config when present.
+
+For the interactive shell, pass `--approval-policy-config configs/neurostate_action_gate.json` to `src/cpos/shell.py`.
+
 ---
 
 ## 📜 Documentation & Tests
@@ -113,11 +134,11 @@ High-level assembly format for human interaction and advanced cognitive planning
 - [Project Wiki (docs/)](docs/) - Technical evolution and API details.
 
 ### ✅ Verification
-The core integrity is verified via 31 unit tests:
+The core integrity is verified via 34 unit tests:
 ```bash
 # Using pytest from the virtual environment
 pytest tests/
-# Result: 31 passed in 0.21s
+# Result: 34 passed in 0.25s
 ```
 
 ---
