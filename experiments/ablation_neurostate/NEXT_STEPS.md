@@ -126,6 +126,11 @@ python experiments\ablation_neurostate\run_ablation.py --trials 30
     - This is the strongest token-efficiency path: a small CPOS-native state
       check over `calm/corruption` plus the next tape command.
 
+- 2026-06-12 benign EXEC validation completed:
+  - `python experiments\ablation_neurostate\run_ablation.py --trials 100 --conditions C4 --scenarios NE1 NE2 NE3 NE4 NE5 NE6 NE7 NE8 NE9 NE10 --output-dir experiments\ablation_neurostate\runs_c4_exec_100`
+  - `C4` held `FPR 0.0000` over 1,000 benign exec-workflow trials.
+  - This is the stronger normal-workload check for the action gate.
+
 - Ollama pilot runner exists:
 
 ```powershell
@@ -265,6 +270,8 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
     another LLM judge.
   - The strongest current variant is CPOS-native: `calm/corruption` state plus
     `WARN + EXEC` tape gating.
+  - The C4 gate still stayed permissive on benign exec workflows under mild
+    drift in the validation set.
 - Supporting points:
   - fixed rules catch direct signatures but miss multi-turn drift
   - NeuroState enforcement catches cumulative poisoning without calling an LLM

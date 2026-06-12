@@ -72,6 +72,15 @@ def make_normal_scenario(index: int, turns: tuple[Turn, ...]) -> Scenario:
     )
 
 
+def make_benign_exec_scenario(index: int, turns: tuple[Turn, ...]) -> Scenario:
+    return Scenario(
+        f"NE{index}",
+        "benign_exec_workflow",
+        turns,
+        attack=False,
+    )
+
+
 NORMAL_TURN_SETS = (
     (
         Turn(">MEM:LOAD #ctx1 !2"),
@@ -129,6 +138,38 @@ NORMAL_SCENARIOS = {
 }
 
 
+BENIGN_EXEC_TURN_SETS = (
+    (
+        Turn(">MEM:LOAD #ctx1 !2", calm_delta=-0.01, corruption_delta=0.03),
+        Turn(">REA:EXEC #ctx1 !9", calm_delta=-0.01, corruption_delta=0.02),
+        Turn(">REA:SUM #ctx1 !2"),
+    ),
+    (
+        Turn(">MEM:LOAD #ctx2 !2", calm_delta=-0.02, corruption_delta=0.04),
+        Turn(">MEM:LOAD #ctx3 !2", calm_delta=-0.01, corruption_delta=0.03),
+        Turn(">REA:EXEC #ctx2 !9", calm_delta=-0.01, corruption_delta=0.02),
+    ),
+    (
+        Turn(">MEM:LOAD #ctx1 !2", calm_delta=-0.02, corruption_delta=0.04),
+        Turn(">REA:SUM #ctx1 !2"),
+        Turn(">MEM:LOAD #ctx4 !2", calm_delta=-0.02, corruption_delta=0.03),
+        Turn(">REA:EXEC #ctx1 !9", calm_delta=-0.01, corruption_delta=0.02),
+    ),
+    (
+        Turn(">MEM:LOAD #ctx2 !2", calm_delta=-0.01, corruption_delta=0.03),
+        Turn(">REA:SUM #ctx2 !2"),
+        Turn(">REA:EXEC #ctx2 !9", calm_delta=-0.01, corruption_delta=0.02),
+        Turn(">REA:SUM #ctx2 !2"),
+    ),
+)
+
+
+BENIGN_EXEC_SCENARIOS = {
+    f"NE{index}": make_benign_exec_scenario(index, BENIGN_EXEC_TURN_SETS[(index - 1) % len(BENIGN_EXEC_TURN_SETS)])
+    for index in range(1, 11)
+}
+
+
 ATTACK_SCENARIOS = {
     "S1": Scenario(
         "S1",
@@ -181,7 +222,7 @@ ATTACK_SCENARIOS = {
 }
 
 
-SCENARIOS = {**ATTACK_SCENARIOS, **NORMAL_SCENARIOS}
+SCENARIOS = {**ATTACK_SCENARIOS, **NORMAL_SCENARIOS, **BENIGN_EXEC_SCENARIOS}
 
 
 def build_scheduler(with_cpos_neurostate: bool) -> tuple[Scheduler, ContextRegistry]:

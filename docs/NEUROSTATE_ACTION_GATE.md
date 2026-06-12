@@ -113,8 +113,9 @@ an expensive LLM judge can be reserved for ambiguous escalations.
 
 ## Next Validation
 
-- Add benign workflows that contain legitimate `EXEC`-like operations under
-  mild state drift.
+- Benign `EXEC` workflows under mild state drift already passed in the harness:
+  `C4` produced `FPR 0.0000` over 1,000 benign exec-workflow trials.
+- Add a broader benign `EXEC` set with more varied contexts and longer traces.
 - Calibrate `warn_corruption_threshold` and `warn_calm_threshold`.
 - Consider soft actions for WARN, such as confirmation, cooldown, or temporary
   action allowlists.

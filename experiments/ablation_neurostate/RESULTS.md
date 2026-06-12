@@ -151,6 +151,10 @@ tiny CPOS-native state check over `calm/corruption` plus the next tape command.
 That means the common path does not need an LLM judge and does not even need the
 heavier external NeuroState Engine projection.
 
+The follow-up benign exec-workflow check remained clean as well: `C4` held
+`FPR 0.0000` over 1,000 benign `EXEC`-style trials under mild drift. That is a
+stronger normal-workload check than the handcrafted summary-only normal set.
+
 ## Ollama Pilot
 
 Command:
