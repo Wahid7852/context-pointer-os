@@ -307,6 +307,13 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
     machine can track whether the interaction has drifted into a risky state
     before the model is asked to make or execute a dangerous decision.
 
+### Paper Outline
+
+- [done] Fixed the 1-paper structure in
+  `experiments\ablation_neurostate\PAPER_OUTLINE.md`.
+  - Main text: CPOS deterministic `C4` result
+  - Appendix: legacy VPS / threshold sensitivity / LLM pilot
+
 ## First Command Tomorrow
 
 ```powershell
