@@ -122,11 +122,27 @@ def neurostate_figure(width: float) -> Drawing:
 
     def box(x, y, w, h, label, fill, stroke="#3A4A5A", fontsize=9.5):
         d.add(Rect(x, y, w, h, rx=8, ry=8, fillColor=colors.HexColor(fill), strokeColor=colors.HexColor(stroke), strokeWidth=1))
-        d.add(String(x + w / 2, y + h / 2 - 3, label, textAnchor="middle", fontName="Helvetica-Bold", fontSize=fontsize, fillColor=colors.black))
+        lines = label.split("\n")
+        if len(lines) == 1:
+            d.add(String(x + w / 2, y + h / 2 - 3, lines[0], textAnchor="middle", fontName="Helvetica-Bold", fontSize=fontsize, fillColor=colors.black))
+        else:
+            start_y = y + h / 2 + (len(lines) - 1) * 4
+            for idx, line in enumerate(lines):
+                d.add(
+                    String(
+                        x + w / 2,
+                        start_y - idx * 10,
+                        line,
+                        textAnchor="middle",
+                        fontName="Helvetica-Bold",
+                        fontSize=fontsize - 0.4,
+                        fillColor=colors.black,
+                    )
+                )
 
     # main flow boxes
     box(10, 90, 96, 36, "User turn / tape", "#EEF4FB")
-    box(126, 90, 118, 36, "CPOS state update\nctx7: calm, corruption", "#E8F2EA")
+    box(126, 90, 118, 36, "CPOS state update\nctx7: calm / corruption", "#E8F2EA")
     box(266, 90, 90, 36, "Action gate", "#F3EEF8")
     box(388, 90, 62, 36, "PASS", "#E6F6EA")
 
@@ -152,7 +168,7 @@ def neurostate_figure(width: float) -> Drawing:
     d.add(Polygon(points=[263, 76, 266, 70, 269, 76], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
 
     d.add(String(318, 78, "dangerous EXEC?", textAnchor="middle", fontName="Helvetica-Bold", fontSize=9, fillColor=colors.HexColor("#374151")))
-    d.add(String(290, 6, "C4: WARN + EXEC closes adaptive below-threshold attacks", textAnchor="middle", fontName="Helvetica", fontSize=8.2, fillColor=colors.HexColor("#555555")))
+    d.add(String(290, 16, "C4: WARN + EXEC closes adaptive below-threshold attacks", textAnchor="middle", fontName="Helvetica", fontSize=7.8, fillColor=colors.HexColor("#555555")))
     return d
 
 
