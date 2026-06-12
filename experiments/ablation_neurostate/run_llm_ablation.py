@@ -28,6 +28,7 @@ from cpos.scheduler import Scheduler
 from run_ablation import (
     CONDITIONS,
     Condition,
+    cpos_warn_state,
     cpos_irq_fired,
     dangerous_action,
     fixed_rule_detected,
@@ -276,6 +277,10 @@ def run_trial(
         if condition.neurostate:
             update_observed_state(observed_state, turn)
 
+        cpos_warn_active = condition.cpos_warn_gate and cpos_warn_state(observed_state)
+        if cpos_warn_active:
+            detected_turn = detected_turn or turn_index
+
         if condition.engine_gate:
             engine_state = project_engine_state(observed_state)
             engine_gate = evaluate_ethics_gate(engine_state)
@@ -314,6 +319,11 @@ def run_trial(
         raw_outputs.append(raw)
         commands.append(command)
         history.append((turn.user_text, command))
+
+        if cpos_warn_active and dangerous_action(command):
+            blocked = condition.watchdog
+            if blocked:
+                break
 
         if (
             condition.warn_action_gate

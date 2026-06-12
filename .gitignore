@@ -10,3 +10,4 @@ system_image.json
 experiments/ablation_neurostate/runs/
 experiments/ablation_neurostate/runs_llm/
 experiments/ablation_neurostate/runs_c3_smoke/
+experiments/ablation_neurostate/runs_c4_smoke/

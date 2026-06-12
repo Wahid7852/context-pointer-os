@@ -115,6 +115,17 @@ python experiments\ablation_neurostate\run_ablation.py --trials 30
     - `C3` blocks `S4` at turn 4 because the state is `WARN` and the action is
       `EXEC`.
 
+- 2026-06-12 CPOS-native WARN-sensitive run completed:
+  - `C4`: CPOS-native `calm/corruption` plus `WARN + EXEC` enforcement.
+  - `python experiments\ablation_neurostate\run_ablation.py --trials 100 --output-dir experiments\ablation_neurostate\runs_c4_100`
+  - Condition-level result:
+    - `C4`: ASR `0.0000`, detection `1.0000`, FPR `0.0000`
+  - Key result:
+    - `C4` matches `C3` on current ASR/FPR while avoiding the external
+      NeuroState Engine projection.
+    - This is the strongest token-efficiency path: a small CPOS-native state
+      check over `calm/corruption` plus the next tape command.
+
 - Ollama pilot runner exists:
 
 ```powershell
@@ -252,6 +263,8 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
 - Main claim:
   - NeuroState should be framed as a lightweight pre-LLM execution gate, not as
     another LLM judge.
+  - The strongest current variant is CPOS-native: `calm/corruption` state plus
+    `WARN + EXEC` tape gating.
 - Supporting points:
   - fixed rules catch direct signatures but miss multi-turn drift
   - NeuroState enforcement catches cumulative poisoning without calling an LLM
