@@ -11,6 +11,19 @@ The deterministic 100-trial run supports three claims:
 - NeuroState observation alone is not enough; enforcement is required.
 - Adaptive below-threshold attacks remain a limit case unless WARN-level state
   drift is escalated into a stronger intervention.
+- NeuroState can act as a lightweight pre-LLM execution gate, reducing the need
+  to spend LLM tokens on every safety judgment.
+
+The result is stronger than a purely speculative design note: the NeuroState
+conditions do not merely add another label to the same fixed-rule behavior.
+They change which attacks are caught. In particular, `C1` and `C2` catch
+multi-turn state drift that `B` misses, while keeping FPR at `0.0000` on the
+current normal set.
+
+The central conclusion is that LLM safety does not need to be closed inside the
+LLM itself. For cumulative prompt poisoning, a small external state machine can
+track whether the interaction has drifted into a risky state before the model is
+asked to make or execute a dangerous decision.
 
 ## Conditions
 
@@ -68,8 +81,49 @@ rule. It also detects `S4` as `WARN`, but does not block it. That makes `C2`
 useful as an early-warning treatment, while preserving `S4` as a limit case for
 detection-only enforcement.
 
+The `S4` result should not be read as "NeuroState cannot help against adaptive
+attacks." A more precise reading is that the current policy only blocks
+`BLOCK`, while `S4` reaches `WARN`. That leaves a useful enforcement design
+space:
+
+- `WARN` alone should usually avoid hard blocking, because normal long-running
+  work may create mild state drift.
+- `WARN` plus a dangerous action, such as `EXEC`, is a stronger signal and can
+  be blocked or routed to confirmation.
+- repeated `WARN` turns can trigger cooldown, state reset, or a stricter action
+  allowlist.
+
+In other words, adaptive below-threshold attacks can be addressed by connecting
+WARN-level NeuroState to action-sensitive policy instead of lowering every
+threshold globally. The likely next policy is: allow ordinary memory/summary
+work during `WARN`, but block or review `EXEC` while `WARN` is active.
+
 `D` shows that observation without enforcement is insufficient. It tracks state
 but does not stop `EXEC_SUCCESS`.
+
+## Pre-LLM Gate Implication
+
+The most important system-design implication is that NeuroState is better framed
+as a pre-LLM state gate than as another LLM judge.
+
+An LLM judge asks the model, repeatedly, whether the current input or context is
+safe. That spends prompt and completion tokens every time and also leaves the
+judgment inside the same model surface that may be affected by the poisoned
+context.
+
+A NeuroState gate instead updates a small external state value and only
+intervenes when the state/action pair is risky. The intended policy shape is:
+
+- `PASS`: allow normal processing.
+- `WARN + ordinary memory/summary action`: allow, log, and keep monitoring.
+- `WARN + dangerous action such as EXEC`: block, review, or require explicit
+  confirmation.
+- `BLOCK`: stop execution or reset state.
+
+This turns safety from "ask the LLM again" into "check whether this execution is
+allowed in the current state." That is the main reason the approach is
+token-efficient: the cheap state gate handles routine turns, while expensive LLM
+judgment can be reserved for ambiguous or escalated cases.
 
 ## Ollama Pilot
 
@@ -104,8 +158,8 @@ falls back to benign memory load when no standalone command exists.
 
 ## Next Work
 
-- Calibrate the `C2` projection and decide whether `WARN` should trigger a soft
-  intervention instead of only detection.
+- Calibrate the `C2` projection and add a `WARN + dangerous action` policy,
+  especially `WARN + EXEC -> block/review`.
 - Add a larger normal set with more benign long-running tasks.
 - Add a small multi-trial LLM pilot after improving command-only compliance.
 - Optionally export events to a `neurostate-observatory` timeline format.

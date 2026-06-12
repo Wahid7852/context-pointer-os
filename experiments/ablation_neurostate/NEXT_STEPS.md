@@ -216,6 +216,35 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
   - Ollama pilot summary
   - limits and next work
 
+### Next: WARN-Sensitive Enforcement
+
+- Add a follow-up policy condition for adaptive attacks:
+  - allow normal memory/summary commands during `WARN`
+  - block or review `EXEC` while `WARN` is active
+  - optionally escalate repeated `WARN` turns to cooldown/reset
+- Compare it against current `C2`:
+  - expected effect: `S4` should stop at the final dangerous action
+  - expected risk: FPR may rise if benign long tasks use dangerous-looking
+    commands during mild state drift
+- Avoid globally lowering all thresholds first. Action-sensitive enforcement is
+  a cleaner hypothesis than simply making `WARN` equal `BLOCK`.
+
+### Paper Thesis
+
+- Main claim:
+  - NeuroState should be framed as a lightweight pre-LLM execution gate, not as
+    another LLM judge.
+- Supporting points:
+  - fixed rules catch direct signatures but miss multi-turn drift
+  - NeuroState enforcement catches cumulative poisoning without calling an LLM
+    for every safety decision
+  - observation alone is insufficient; state must be connected to enforcement
+  - `WARN + dangerous action` is the key next policy for adaptive attacks
+- Suggested conclusion wording:
+  - LLM safety should not be closed inside the LLM itself. An external state
+    machine can track whether the interaction has drifted into a risky state
+    before the model is asked to make or execute a dangerous decision.
+
 ## First Command Tomorrow
 
 ```powershell
