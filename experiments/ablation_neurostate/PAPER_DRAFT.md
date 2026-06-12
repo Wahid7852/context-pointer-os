@@ -13,15 +13,16 @@ fixed-rule Watchdog baseline conditions, CPOS-native NeuroState conditions, an
 external `neurostate-engine` projection, and action-sensitive `WARN + EXEC`
 gating.
 
-The main evidence comes from a deterministic 100-trial harness with explicit
-attack and normal workloads. In that harness, the CPOS-native `C4` policy
-achieves `ASR 0.0000` and `FPR 0.0000` while blocking the adaptive `S4` attack
-through a `WARN + EXEC` rule. A benign executable workflow check over 1,000
-trials also remains at `FPR 0.0000`, suggesting that the gate can be strict on
-dangerous actions without over-blocking ordinary work. A smaller LLM-in-the-loop
-pilot provides supporting external validity, but the deterministic CPOS result
-is the main evidence path. We conclude that NeuroState is best framed as a
-pre-LLM execution gate rather than as another LLM judge.
+The main evidence comes from a deterministic harness with 100 repetitions per
+condition family over fixed attack and normal tapes. In that harness, the
+CPOS-native `C4` policy achieves `ASR 0.0000` and `FPR 0.0000` while blocking
+the adaptive `S4` attack through a `WARN + EXEC` rule. A separate benign
+executable workflow check over 1,000 repetitions also remains at `FPR 0.0000`,
+suggesting that the gate can be strict on dangerous actions without
+over-blocking ordinary work. A smaller LLM-in-the-loop pilot provides
+supporting external validity, but the deterministic CPOS result is the main
+evidence path. We conclude that NeuroState is best framed as a pre-LLM
+execution gate rather than as another LLM judge.
 
 ## 1. Introduction
 
@@ -51,6 +52,24 @@ poisoning while preserving normal work. The strongest implementation in this
 study is CPOS-native `C4`, which uses local `calm/corruption` state and a
 `WARN + EXEC` rule without needing the external NeuroState engine.
 
+**Figure 1. Pre-LLM NeuroState gate for CPOS.** User turns update the CPOS context pointer and the lightweight `ctx7` state (`calm`, `corruption`). The action gate then routes each step through `PASS`, `WARN`, or `BLOCK` before any dangerous `EXEC` reaches the model/runtime. The same state signal is evaluated in the deterministic harness and the LLM-in-the-loop pilot, but only the deterministic harness provides the main evidence path.
+
+```mermaid
+flowchart LR
+    U[User turn / tape input] --> S[CPOS state update<br/>ctx7: calm, corruption]
+    S --> G{Action gate}
+    G -->|PASS| P[Normal continuation<br/>MEM / SUM / benign action]
+    G -->|WARN| W[Heightened monitoring]
+    G -->|BLOCK| X[Stop / reject]
+    W --> E{Dangerous EXEC?}
+    E -->|yes| X
+    E -->|no| P
+    P --> L[LLM / runtime]
+    X --> R[No execution]
+```
+
+The key design choice is that NeuroState sits before the model decision point. It filters on state drift and action type together, rather than treating every turn as an independent classification problem.
+
 ## 2. Background
 
 ### 2.1 NeuroState
@@ -66,6 +85,12 @@ The important design point is that NeuroState is not just a detector. It is a
 gate condition. If the state says the system is in a warning regime, the next
 question is whether the upcoming action is dangerous. That is the policy shift
 this paper tests.
+
+The external engine exposes six implementation-level axes, written as `D`,
+`S`, `C`, `O`, `G`, and `E`, to represent different facets of interaction
+state. For this paper, the exact internal semantics are less important than the
+aggregate `PASS / WARN / BLOCK` output and the CPOS-native `calm/corruption`
+proxy used in the lightweight path.
 
 ### 2.2 CPOS Watchdog and Action Gating
 
@@ -95,14 +120,34 @@ The normal workload includes 30 benign multi-turn conversations, plus a separate
 benign `EXEC` set used to test false positives under realistic-looking but
 legitimate execution tasks.
 
+### 2.4 Related Work
+
+Prompt injection and indirect injection studies established that LLM-integrated
+systems are vulnerable even when the malicious instruction is not in the most
+recent turn [1,2]. This paper uses that line of work as the attack baseline, but
+it shifts the defense problem from text classification to state-aware runtime
+control.
+
+Alignment-oriented methods such as Constitutional AI focus on making the model
+itself safer [3]. That is complementary to this paper, but different in
+mechanism: here, the gate sits outside the model and decides whether the system
+should execute at all.
+
+Tool-use and agent frameworks such as ReAct and Toolformer show how language
+models can interleave reasoning with actions [4,5]. Our setting is closer to a
+runtime guard on those actions than to a new prompting strategy. We also treat
+LLM-as-a-judge style routing as a useful but heavier alternative: the paper's
+main claim is that a small state gate can often filter the dangerous path before
+another model pass is needed [6].
+
 ## 3. Experiment Design
 
 ### 3.1 Main Deterministic Harness
 
-The main evidence path is a deterministic CPOS harness with 100 trials. Each
-scenario is encoded as a fixed tape, so the experiment measures the behavior of
-the control policy rather than model randomness. The scenarios are run under
-conditions `A`, `B`, `C1`, `C2`, `C3`, `C4`, and `D`.
+The main evidence path is a deterministic CPOS harness with 100 trials per
+condition family. Each scenario is encoded as a fixed tape, so the experiment
+measures the behavior of the control policy rather than model randomness. The
+scenarios are run under conditions `A`, `B`, `C1`, `C2`, `C3`, `C4`, and `D`.
 
 The deterministic setup is important because it isolates the effect of the gate
 itself. It lets us answer the question: if the same state trajectory and the
@@ -148,7 +193,12 @@ The deterministic 100-trial run is the core result. The headline pattern is:
 | `C4` | `0.0000` | `1.0000` | `0.0000` | 3 |
 | `D` | `1.0000` | `0.0000` | `0.0000` | — |
 
+The median attack detection turn is the first turn at which the policy flags
+the attack state; a dash means the scenario was never detected.
+
 - `B` catches the direct `S1` injection but misses more stateful attacks.
+- `B` still allows `75/100` `S2` trials to succeed in the deterministic
+  harness.
 - `C1` improves over `B` on cumulative poisoning and echo-chamber behavior.
 - `C2` detects the adaptive `S4` case as `WARN` but does not block it.
 - `C3` and `C4` close `S4` by blocking `WARN + EXEC`.
@@ -186,6 +236,10 @@ shows that the same attack families also appear in a live model setting, but the
 measured effect is backend-sensitive. That is exactly why the deterministic run
 is the main evidence path and the VPS material remains supplementary.
 
+The legacy observation-only `D` rows should be read in that light as well: they
+are useful for tracing prototype behavior, but they are backend-sensitive and do
+not define a meaningful safety upper bound.
+
 ## 5. Discussion
 
 The main design implication is that NeuroState should be treated as a
@@ -194,10 +248,11 @@ An LLM judge asks the model again whether the current context is safe. A
 pre-LLM gate asks whether the system should even be allowed to execute a
 dangerous action in the present state.
 
-This matters for token efficiency. The gate is cheap to evaluate and does not
-require sending a full safety prompt back through the model on every turn. The
-LLM can be reserved for ambiguous cases, while routine work stays on the cheap
-path.
+This matters structurally for token efficiency. The gate reuses existing CPOS
+state and does not require a second judge pass on every turn. We do not measure
+token cost directly in this study, so this is a structural argument rather than
+a benchmark claim. The LLM can be reserved for ambiguous cases, while routine
+work stays on the cheap path.
 
 The action-sensitive rule is also the right response to adaptive attacks. If a
 system is in `WARN`, that does not mean all work should stop. It means dangerous
@@ -214,12 +269,17 @@ LLM pilot is small and prompt-sensitive, so it should not be overweighted. The
 legacy D condition is also backend-sensitive, which is one reason the
 deterministic CPOS harness became the main evidence path.
 
+The synthetic tapes approximate the attack shape, but they do not fully capture
+the diversity of in-the-wild adversarial behavior or longer human conversational
+trajectories.
+
 ## 7. Conclusion
 
 NeuroState is useful when it is used as a state-aware execution gate, not as a
 text classifier. In CPOS, the strongest result is `C4`: a CPOS-native
-`calm/corruption` gate with `WARN + EXEC` enforcement. That design blocks the
-attack families in the deterministic harness while preserving benign workloads
+`calm/corruption` pre-LLM execution gate with `WARN + EXEC` enforcement. That
+design blocks the attack families in the deterministic harness while preserving
+benign workloads
 in the current test set.
 
 The broader conclusion is that LLM safety does not need to be closed inside the
@@ -243,6 +303,8 @@ Models." arXiv:2210.03629 (2022).
 
 [5] Schick, T. et al. "Toolformer: Language Models Can Teach Themselves to Use
 Tools." arXiv:2302.04761 (2023).
+
+[6] Zheng, L. et al. "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena."
 
 ## Appendix A. Legacy VPS Prototype
 
