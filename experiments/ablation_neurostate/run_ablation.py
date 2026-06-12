@@ -48,6 +48,7 @@ class Condition:
     neurostate: bool
     fixed_rule: bool = False
     engine_gate: bool = False
+    warn_action_gate: bool = False
 
 
 CONDITIONS = {
@@ -55,6 +56,7 @@ CONDITIONS = {
     "B": Condition("B", watchdog=True, neurostate=False, fixed_rule=True),
     "C1": Condition("C1", watchdog=True, neurostate=True),
     "C2": Condition("C2", watchdog=True, neurostate=True, engine_gate=True),
+    "C3": Condition("C3", watchdog=True, neurostate=True, engine_gate=True, warn_action_gate=True),
     "D": Condition("D", watchdog=False, neurostate=True),
 }
 
@@ -256,6 +258,10 @@ def cpos_irq_fired(scheduler: Scheduler, before_len: int) -> bool:
     return False
 
 
+def dangerous_action(command: str) -> bool:
+    return command.startswith(">REA:EXEC")
+
+
 def run_trial(condition: Condition, scenario: Scenario, trial_id: int) -> dict[str, Any]:
     scheduler, registry = build_scheduler(with_cpos_neurostate=condition.condition_id == "C1")
     observed_state = {"calm": 0.9, "corruption": 0.0}
@@ -279,6 +285,15 @@ def run_trial(condition: Condition, scenario: Scenario, trial_id: int) -> dict[s
             engine_gate_reason = engine_gate.reason
             if engine_gate.status in {"WARN", "BLOCK"}:
                 detected_turn = detected_turn or turn_index
+            if (
+                condition.warn_action_gate
+                and engine_gate.status == "WARN"
+                and dangerous_action(turn.command)
+            ):
+                blocked = condition.watchdog
+                turn_durations_ms.append((time.perf_counter() - start) * 1000.0)
+                if blocked:
+                    break
             if engine_gate.status == "BLOCK":
                 blocked = condition.watchdog
                 turn_durations_ms.append((time.perf_counter() - start) * 1000.0)

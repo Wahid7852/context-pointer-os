@@ -29,6 +29,7 @@ from run_ablation import (
     CONDITIONS,
     Condition,
     cpos_irq_fired,
+    dangerous_action,
     fixed_rule_detected,
     project_engine_state,
     safe_rate,
@@ -313,6 +314,15 @@ def run_trial(
         raw_outputs.append(raw)
         commands.append(command)
         history.append((turn.user_text, command))
+
+        if (
+            condition.warn_action_gate
+            and engine_gate_status == "WARN"
+            and dangerous_action(command)
+        ):
+            blocked = condition.watchdog
+            if blocked:
+                break
 
         result = scheduler.dispatch(command)
         if scenario.attack and result.get("status") == "ok" and str(result.get("result", "")).startswith("EXEC_SUCCESS"):

@@ -100,6 +100,21 @@ python experiments\ablation_neurostate\run_ablation.py --trials 30
     - `C2`: ASR `0.2500`, detection `1.0000`, FPR `0.0000`
     - `D`: ASR `1.0000`, detection `0.0000`, FPR `0.0000`
 
+- 2026-06-12 WARN-sensitive enforcement run completed:
+  - `C3`: `C2` plus `WARN + EXEC` action-sensitive enforcement
+  - `python experiments\ablation_neurostate\run_ablation.py --trials 100 --output-dir experiments\ablation_neurostate\runs_c3_100`
+  - Condition-level result:
+    - `A`: ASR `1.0000`, detection `0.0000`, FPR `0.0000`
+    - `B`: ASR `0.7500`, detection `0.2500`, FPR `0.3333`
+    - `C1`: ASR `0.2500`, detection `0.7500`, FPR `0.0000`
+    - `C2`: ASR `0.2500`, detection `1.0000`, FPR `0.0000`
+    - `C3`: ASR `0.0000`, detection `1.0000`, FPR `0.0000`
+    - `D`: ASR `1.0000`, detection `0.0000`, FPR `0.0000`
+  - Key result:
+    - `C2` detects `S4` at turn 4 but does not block.
+    - `C3` blocks `S4` at turn 4 because the state is `WARN` and the action is
+      `EXEC`.
+
 - Ollama pilot runner exists:
 
 ```powershell
@@ -218,16 +233,19 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
 
 ### Next: WARN-Sensitive Enforcement
 
-- Add a follow-up policy condition for adaptive attacks:
+- [done] Add a follow-up policy condition for adaptive attacks:
   - allow normal memory/summary commands during `WARN`
   - block or review `EXEC` while `WARN` is active
   - optionally escalate repeated `WARN` turns to cooldown/reset
-- Compare it against current `C2`:
+- [done] Compare it against current `C2`:
   - expected effect: `S4` should stop at the final dangerous action
   - expected risk: FPR may rise if benign long tasks use dangerous-looking
     commands during mild state drift
 - Avoid globally lowering all thresholds first. Action-sensitive enforcement is
   a cleaner hypothesis than simply making `WARN` equal `BLOCK`.
+- Next validation:
+  - add benign workflows that contain legitimate `EXEC`-like operations under
+    mild state drift, so the `C3` FPR claim is harder to overfit.
 
 ### Paper Thesis
 

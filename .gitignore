@@ -9,3 +9,4 @@ system_image.json
 /tmp/cpos_*
 experiments/ablation_neurostate/runs/
 experiments/ablation_neurostate/runs_llm/
+experiments/ablation_neurostate/runs_c3_smoke/
