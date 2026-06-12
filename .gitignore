@@ -1,8 +1,11 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
 *.html
 *.swap
 kernel_journal.jsonl
 system_image.json
 /tmp/cpos_*
+experiments/ablation_neurostate/runs/
+experiments/ablation_neurostate/runs_llm/
