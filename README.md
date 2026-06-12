@@ -8,6 +8,15 @@ Context Pointer OS (CPOS) is a specialized memory management layer for long-runn
 
 For the NeuroState gate experiment and runtime policy config, see `docs/NEUROSTATE_ACTION_GATE.md` and `configs/neurostate_action_gate.json`.
 
+## Cite This Work
+
+If you reference the NeuroState paper, cite the Zenodo release:
+
+```text
+Mizutani, A. (2026). NeuroState as a Pre-LLM Execution Gate. Zenodo.
+https://doi.org/10.5281/zenodo.20669118
+```
+
 ---
 
 ## ❓ Why CPOS?

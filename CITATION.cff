@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite the Zenodo release."
+title: "NeuroState as a Pre-LLM Execution Gate"
+authors:
+  - family-names: Mizutani
+    given-names: Aya
+    affiliation: Emilia Lab
+    orcid: "https://orcid.org/0009-0006-2759-5720"
+version: "1.0"
+doi: "10.5281/zenodo.20669118"
+license: "CC-BY-4.0"
+date-released: "2026-06-13"
+repository-code: "https://github.com/kagioneko/context-pointer-os"
+url: "https://doi.org/10.5281/zenodo.20669118"
