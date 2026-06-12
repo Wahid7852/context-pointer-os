@@ -59,6 +59,13 @@ Also track related repositories:
     `experiments\ablation_neurostate\run_ablation.py` so the export can be
     produced in one step.
 
+### Legacy VPS Comparison
+
+- [done] Added
+  `experiments\ablation_neurostate\COMPARISON_VPS_VS_CPOS.md` to keep the
+  Desktop VPS prototype separate from the current deterministic CPOS mainline
+  results.
+
 ### Threshold Calibration Note
 
 - The CPOS-native `C4` gate is stable at the default thresholds

@@ -130,6 +130,9 @@ Threshold sensitivity check:
 The corresponding opt-in scheduler policy is described in
 `docs/NEUROSTATE_ACTION_GATE.md`.
 
+For a comparison with the earlier Desktop VPS prototype package, see
+`experiments/ablation_neurostate/COMPARISON_VPS_VS_CPOS.md`.
+
 `D` shows that observation without enforcement is insufficient. It tracks state
 but does not stop `EXEC_SUCCESS`.
 
