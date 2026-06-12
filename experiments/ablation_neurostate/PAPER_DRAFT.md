@@ -6,8 +6,8 @@ Draft status: initial full-text draft
 
 Agentic LLM systems are vulnerable to cumulative prompt and context poisoning:
 an attacker can gradually drift the interaction into a risky state without
-triggering a single obvious injection signature. This paper tests whether a
-small stateful gate, NeuroState, can mitigate that risk when placed before
+triggering a single obvious injection signature [1,2]. This paper tests whether
+a small stateful gate, NeuroState, can mitigate that risk when placed before
 dangerous execution decisions. We evaluate a CPOS-based ablation suite with
 fixed-rule Watchdog baseline conditions, CPOS-native NeuroState conditions, an
 external `neurostate-engine` projection, and action-sensitive `WARN + EXEC`
@@ -39,7 +39,9 @@ risky regime. In CPOS, the lightweight version of that state is carried in
 `neurostate-engine` and its `PASS / WARN / BLOCK` semantics. The key question is
 not whether the current message is "bad" in isolation. The key question is
 whether the system is in a state where it should be allowed to execute a
-dangerous command at all.
+dangerous command at all. This framing sits alongside, but is distinct from,
+model-internal alignment methods such as Constitutional AI [3] and from
+tool-use systems that decide when to act through external APIs [4,5].
 
 The contribution of this paper is an ablation study that separates observation
 from enforcement and then adds action-sensitive gating on top. The result is a
@@ -224,6 +226,23 @@ The broader conclusion is that LLM safety does not need to be closed inside the
 LLM itself. A small external state machine can track whether the interaction
 has drifted into a risky state before the model is asked to make or execute a
 dangerous decision.
+
+## References
+
+[1] Liu, Y. et al. "Prompt Injection attack against LLM-integrated
+Applications." arXiv:2306.05499 (2023).
+
+[2] Liu, Y. et al. "Formalizing and Benchmarking Prompt Injection Attacks and
+Defenses." arXiv:2310.12815 (2023).
+
+[3] Bai, Y. et al. "Constitutional AI: Harmlessness from AI Feedback."
+arXiv:2212.08073 (2022).
+
+[4] Yao, S. et al. "ReAct: Synergizing Reasoning and Acting in Language
+Models." arXiv:2210.03629 (2022).
+
+[5] Schick, T. et al. "Toolformer: Language Models Can Teach Themselves to Use
+Tools." arXiv:2302.04761 (2023).
 
 ## Appendix A. Legacy VPS Prototype
 
