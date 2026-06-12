@@ -316,6 +316,13 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
   - Appendix A now explicitly explains why the project moved from
     model-in-the-loop VPS runs to the deterministic CPOS harness.
 
+### Paper Draft
+
+- [done] Started the first full draft in
+  `experiments\ablation_neurostate\PAPER_DRAFT.md`.
+  - Abstract, Introduction, Results, Discussion, Limitations, Conclusion
+  - Appendix A carries the VPS migration history
+
 ## First Command Tomorrow
 
 ```powershell
