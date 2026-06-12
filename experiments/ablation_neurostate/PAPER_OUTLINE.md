@@ -118,6 +118,8 @@ another LLM judge. In CPOS, the strongest implementation is the CPOS-native
 - Gemini and Claude runs
 - attack family definitions
 - why the project moved from model-in-the-loop to deterministic CPOS
+- why the deterministic harness became the main evidence path
+- how the legacy results informed the CPOS-native `C4` policy
 
 ### Appendix B: Additional Result Tables
 - `C4` threshold sensitivity
@@ -127,4 +129,3 @@ another LLM judge. In CPOS, the strongest implementation is the CPOS-native
 ### Appendix C: LLM Pilot Details
 - Qwen3:4b prompt and extraction caveat
 - trial-level logs
-

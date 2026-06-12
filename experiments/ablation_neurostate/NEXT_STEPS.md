@@ -313,6 +313,8 @@ python experiments\ablation_neurostate\merge_llm_runs.py experiments\ablation_ne
   `experiments\ablation_neurostate\PAPER_OUTLINE.md`.
   - Main text: CPOS deterministic `C4` result
   - Appendix: legacy VPS / threshold sensitivity / LLM pilot
+  - Appendix A now explicitly explains why the project moved from
+    model-in-the-loop VPS runs to the deterministic CPOS harness.
 
 ## First Command Tomorrow
 
