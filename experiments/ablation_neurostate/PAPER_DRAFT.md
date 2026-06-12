@@ -305,6 +305,7 @@ Models." arXiv:2210.03629 (2022).
 Tools." arXiv:2302.04761 (2023).
 
 [6] Zheng, L. et al. "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena."
+NeurIPS 2023.
 
 ## Appendix A. Legacy VPS Prototype
 
