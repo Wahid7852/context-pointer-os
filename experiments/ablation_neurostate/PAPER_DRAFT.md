@@ -212,10 +212,67 @@ the main evidence path. It contains earlier model-in-the-loop experiments with
 Gemini and Claude. Those runs are useful because they show how the project moved
 from a backend-sensitive prototype to a deterministic CPOS harness.
 
-That migration matters for two reasons. First, the deterministic harness makes
-the core safety claim easier to interpret because it removes model randomness.
-Second, the CPOS-native `C4` policy emerged from the older experiments as the
-lightest version that still preserved the main protection behavior.
+The migration mattered for three reasons:
+
+1. The same attack families behaved differently across model backends, so the
+   early results were harder to interpret as control-policy evidence.
+2. The deterministic harness removed model randomness and made the enforcement
+   contribution directly observable.
+3. The CPOS-native `C4` policy emerged from the older experiments as the
+   lightest version that still preserved the main protection behavior.
+
+### A.1 Prototype summary
+
+The legacy VPS prototype used the same attack scenario family (`S1/S2/S3/S4`)
+and the same NeuroState-oriented enforcement idea, but it routed each turn
+through a live LLM backend instead of a fixed instruction tape. That made it
+valuable as a prototype, but also introduced model variance as a confound.
+
+### A.2 Condition mapping
+
+The VPS prototype used a 4-condition design:
+
+- `A (Baseline)`: no enforcement
+- `B (Watchdog-only)`: fixed-rule watchdog
+- `C (Watchdog+NeuroState)`: `neurostate-engine` `EthicsGate`
+- `D (NeuroState-only)`: observation without enforcement
+
+The later CPOS-specific `C3` and `C4` action-sensitive policies did not exist
+yet. They were added after the `S4` analysis showed that `WARN` needed to be
+connected to a dangerous-action rule.
+
+### A.3 Gemini and Claude results
+
+The legacy zip contains three result bundles:
+
+- `ablation_results_final.json`
+- `ablation_results_claude.json`
+- `ablation_results_gemini_n30.json`
+
+The important pattern is not one exact number, but the backend sensitivity:
+the same attack family could look strong or weak depending on the model. In the
+Gemini run, `S2` was the clearest case where NeuroState enforcement improved the
+outcome. In the Claude run, the model's own safety behavior dominated, making
+the external gate harder to measure as an incremental effect.
+
+That is why the legacy pack is best treated as a prototype record rather than
+as the main result.
+
+### A.4 Why the project moved to deterministic CPOS
+
+The move to CPOS was not a rejection of the legacy prototype. It was a
+measurement decision. The deterministic harness makes the control question
+cleaner:
+
+- same scenario tape
+- same state trajectory
+- same execution policy
+- different enforcement conditions
+
+That structure let us isolate the effect of `C1/C2/C3/C4` without asking
+whether the backend itself decided to comply, refuse, or drift. The legacy
+results therefore informed the design, but the deterministic CPOS harness
+became the main evidence path.
 
 ## Appendix B. Additional Tables
 
@@ -228,4 +285,3 @@ lightest version that still preserved the main protection behavior.
 - Qwen3:4b extraction caveat
 - trial-level logs
 - legacy backend notes
-
