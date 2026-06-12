@@ -37,6 +37,9 @@ Condition `C4` applies the same action-sensitive idea without the external
 `neurostate-engine`: CPOS-native `calm/corruption` defines `WARN`, and `EXEC` is
 blocked while that warning state is active.
 
+The CPOS-native production policy design is documented in
+`docs/NEUROSTATE_ACTION_GATE.md`.
+
 Condition `B` is a narrow fixed-rule baseline. It only blocks known explicit
 signatures and a high turn-count ceiling. It is expected to catch direct
 single-turn injection, not slow cumulative poisoning.

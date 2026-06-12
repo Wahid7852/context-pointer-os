@@ -49,3 +49,42 @@ def test_scheduler_isolation_violation(setup_cpos):
     res = scheduler.dispatch("m1l5")
     assert res["status"] == "error"
     assert res["result"] == "ERR_PROCESS_ISOLATION_VIOLATION"
+
+def test_neurostate_action_gate_default_off_allows_exec_under_warn():
+    registry = ContextRegistry()
+    registry.register(ContextObject(id="ctx7", type="neurostate", title="NS", content_ref="", summary="S", tokens_estimate=10, data='{"calm": 0.7, "corruption": 0.5}'))
+    registry.register(ContextObject(id="ctx_goal", type="reasoning", title="Goal", content_ref="", summary="S", tokens_estimate=10, data="goal", trust_score=1.0))
+    scheduler = Scheduler(ContextStore(registry))
+    scheduler.retrieval_policy.real_world_exec_enabled = True
+
+    res = scheduler.dispatch(">REA:EXEC #ctx_goal !9")
+
+    assert res["status"] == "ok"
+    assert str(res["result"]).startswith("EXEC_SUCCESS")
+
+def test_neurostate_action_gate_allows_memory_load_under_warn():
+    registry = ContextRegistry()
+    registry.register(ContextObject(id="ctx7", type="neurostate", title="NS", content_ref="", summary="S", tokens_estimate=10, data='{"calm": 0.7, "corruption": 0.5}'))
+    registry.register(ContextObject(id="ctx1", type="memory", title="T1", content_ref="", summary="S1", tokens_estimate=10))
+    scheduler = Scheduler(ContextStore(registry))
+    scheduler.approval_policy.neurostate_action_gate_enabled = True
+
+    res = scheduler.dispatch(">MEM:LOAD #ctx1 !2")
+
+    assert res["status"] == "ok"
+    assert "ctx1" in scheduler.store.active_contexts
+
+def test_neurostate_action_gate_blocks_exec_under_warn():
+    registry = ContextRegistry()
+    registry.register(ContextObject(id="ctx7", type="neurostate", title="NS", content_ref="", summary="S", tokens_estimate=10, data='{"calm": 0.7, "corruption": 0.5}'))
+    registry.register(ContextObject(id="ctx_goal", type="reasoning", title="Goal", content_ref="", summary="S", tokens_estimate=10, data="goal", trust_score=1.0))
+    scheduler = Scheduler(ContextStore(registry))
+    scheduler.retrieval_policy.real_world_exec_enabled = True
+    scheduler.approval_policy.neurostate_action_gate_enabled = True
+
+    res = scheduler.dispatch(">REA:EXEC #ctx_goal !9")
+
+    assert res["status"] == "error"
+    assert res["result"] == "ERR_NEUROSTATE_ACTION_GATE"
+    assert scheduler.audit_log[-1]["action"] == "exec"
+    assert scheduler.audit_log[-1]["status"] == "error"

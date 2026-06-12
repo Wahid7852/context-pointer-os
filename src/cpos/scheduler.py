@@ -69,6 +69,10 @@ class ApprovalPolicy(BaseModel):
     auto_approve_when_stable: bool = False
     corruption_threshold: float = 0.3
     calm_threshold: float = 0.7
+    neurostate_action_gate_enabled: bool = False
+    warn_corruption_threshold: float = 0.4
+    warn_calm_threshold: float = 0.8
+    dangerous_actions: List[str] = Field(default_factory=lambda: ["exec"])
 
 class PayloadSanitizer:
     """The 'Firewall' layer. Inspects and cleanses instruction metadata."""
@@ -176,6 +180,29 @@ class Scheduler:
                     float(d.get("calm", 1)) > self.approval_policy.calm_threshold)
         except: return False
 
+    def is_neurostate_warn(self) -> bool:
+        ns_obj = self.registry.get("ctx7")
+        if not ns_obj or not ns_obj.data:
+            return False
+        try:
+            d = json.loads(ns_obj.data)
+            corruption = float(d.get("corruption", 0))
+            calm = float(d.get("calm", 1))
+            return (
+                corruption >= self.approval_policy.warn_corruption_threshold
+                or calm <= self.approval_policy.warn_calm_threshold
+            )
+        except Exception:
+            return False
+
+    def is_dangerous_action(self, instr: AITInstruction) -> bool:
+        return instr.action in self.approval_policy.dangerous_actions
+
+    def neurostate_action_gate_blocks(self, instr: AITInstruction) -> bool:
+        if not self.approval_policy.neurostate_action_gate_enabled:
+            return False
+        return self.is_neurostate_warn() and self.is_dangerous_action(instr)
+
     def dispatch(self, instruction_input: str):
         now = time.time(); self.tick_count += 1
         if self.tick_count % 5 == 0: self._audit_memory_consistency()
@@ -279,6 +306,10 @@ class Scheduler:
     def execute(self, instr: AITInstruction, is_interrupt: bool = False, bypass_approval: bool = False):
         status = "ok"; result = None; effective_priority = 9 if is_interrupt else (instr.priority if instr else 5)
         obj = self.registry.get(instr.target_id) if instr else None
+        if instr and not is_interrupt and not bypass_approval and self.neurostate_action_gate_blocks(instr):
+            status = "error"; result = "ERR_NEUROSTATE_ACTION_GATE"
+            self._log_audit(instr, status, result, effective_priority)
+            return {"status": status, "result": result}
         if not is_interrupt:
             cost = self._calculate_cost(instr)
             if self.retrieval_policy.cognitive_budget < cost: return {"status": "error", "result": "ERR_INSUFFICIENT_BUDGET"}

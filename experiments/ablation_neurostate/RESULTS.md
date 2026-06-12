@@ -116,6 +116,9 @@ tape-native `calm/corruption` state directly. In the current harness, `C4`
 matches `C3` on ASR and FPR while keeping the state check as a small local policy
 over the command tape.
 
+The corresponding opt-in scheduler policy is described in
+`docs/NEUROSTATE_ACTION_GATE.md`.
+
 `D` shows that observation without enforcement is insufficient. It tracks state
 but does not stop `EXEC_SUCCESS`.
 
