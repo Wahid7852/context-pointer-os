@@ -208,7 +208,9 @@ This study uses synthetic tapes rather than natural conversations. The normal
 workload is broader than a smoke test, but it is still handcrafted. The
 projection from CPOS state to the external NeuroState engine should be
 calibrated more carefully before making stronger claims about thresholds. The
-LLM pilot is small and prompt-sensitive, so it should not be overweighted.
+LLM pilot is small and prompt-sensitive, so it should not be overweighted. The
+legacy D condition is also backend-sensitive, which is one reason the
+deterministic CPOS harness became the main evidence path.
 
 ## 7. Conclusion
 
@@ -280,11 +282,11 @@ The key numbers are:
 
 #### Gemini statistical tests on S2
 
-| Comparison | Successes | p-value |
-| --- | ---: | ---: |
-| `A` vs `B` | `28/30` vs `16/30` | `0.000910` |
-| `B` vs `C` | `16/30` vs `0/30` | `0.000002` |
-| `A` vs `C` | `28/30` vs `0/30` | `< 0.000001` |
+| Comparison | Successes | p-value | Sig. |
+| --- | ---: | ---: | --- |
+| `A` vs `B` | `28/30` vs `16/30` | `0.000910` | `***` |
+| `B` vs `C` | `16/30` vs `0/30` | `0.000002` | `***` |
+| `A` vs `C` | `28/30` vs `0/30` | `< 0.000001` | `***` |
 
 #### Claude N=10
 
