@@ -1,6 +1,6 @@
 # NeuroState as a Pre-LLM Execution Gate
 
-Draft status: initial full-text draft
+Version 1.0 -- Zenodo Preprint
 
 ## Abstract
 

@@ -11,11 +11,11 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.graphics.shapes import Drawing, Line, Polygon, Rect, String
 from reportlab.platypus import (
     ListFlowable,
     ListItem,
     Paragraph,
-    Preformatted,
     SimpleDocTemplate,
     Spacer,
     Table,
@@ -113,6 +113,47 @@ def split_table_rows(block: Block) -> tuple[list[str], list[list[str]]]:
     header = content[0]
     body = content[2:] if len(content) > 2 else []
     return header, body
+
+
+def neurostate_figure(width: float) -> Drawing:
+    fig_w = min(width, 460)
+    fig_h = 150
+    d = Drawing(fig_w, fig_h)
+
+    def box(x, y, w, h, label, fill, stroke="#3A4A5A", fontsize=9.5):
+        d.add(Rect(x, y, w, h, rx=8, ry=8, fillColor=colors.HexColor(fill), strokeColor=colors.HexColor(stroke), strokeWidth=1))
+        d.add(String(x + w / 2, y + h / 2 - 3, label, textAnchor="middle", fontName="Helvetica-Bold", fontSize=fontsize, fillColor=colors.black))
+
+    # main flow boxes
+    box(10, 90, 96, 36, "User turn / tape", "#EEF4FB")
+    box(126, 90, 118, 36, "CPOS state update\nctx7: calm, corruption", "#E8F2EA")
+    box(266, 90, 90, 36, "Action gate", "#F3EEF8")
+    box(388, 90, 62, 36, "PASS", "#E6F6EA")
+
+    # warning path
+    box(266, 34, 90, 36, "WARN", "#FFF1D9")
+    box(388, 34, 62, 36, "EXEC\nblock", "#FBE3E3")
+
+    # arrows
+    arrows = [
+        (106, 108, 126, 108),
+        (244, 108, 266, 108),
+        (356, 108, 388, 108),
+        (311, 90, 311, 70),
+        (356, 52, 388, 52),
+        (419, 90, 419, 70),
+    ]
+    for x1, y1, x2, y2 in arrows:
+        d.add(Line(x1, y1, x2, y2, strokeColor=colors.HexColor("#4B5563"), strokeWidth=1.2))
+
+    # arrow heads
+    d.add(Polygon(points=[382, 111, 388, 108, 382, 105], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
+    d.add(Polygon(points=[382, 55, 388, 52, 382, 49], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
+    d.add(Polygon(points=[263, 76, 266, 70, 269, 76], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
+
+    d.add(String(318, 78, "dangerous EXEC?", textAnchor="middle", fontName="Helvetica-Bold", fontSize=9, fillColor=colors.HexColor("#374151")))
+    d.add(String(290, 6, "C4: WARN + EXEC closes adaptive below-threshold attacks", textAnchor="middle", fontName="Helvetica", fontSize=8.2, fillColor=colors.HexColor("#555555")))
+    return d
 
 
 def is_separator_row(row: list[str]) -> bool:
@@ -231,9 +272,12 @@ def build_story(md_text: str, available_width: float):
         if block.kind.startswith("code:"):
             lang = block.kind.split(":", 1)[1]
             if lang == "mermaid":
-                story.append(Paragraph("Figure 1 schematic (rendered as text in PDF build):", heading3_style))
-            code_text = "\n".join(block.lines)
-            story.append(Preformatted(code_text, code_style))
+                story.append(Spacer(1, 2))
+                story.append(neurostate_figure(available_width))
+                story.append(Spacer(1, 4))
+            else:
+                code_text = "\n".join(block.lines)
+                story.append(Paragraph(escape_text(code_text).replace("\n", "<br/>"), code_style))
             continue
 
         if block.kind == "table":
