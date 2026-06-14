@@ -117,7 +117,7 @@ def split_table_rows(block: Block) -> tuple[list[str], list[list[str]]]:
 
 def neurostate_figure(width: float) -> Drawing:
     fig_w = min(width, 460)
-    fig_h = 150
+    fig_h = 170
     d = Drawing(fig_w, fig_h)
 
     def box(x, y, w, h, label, fill, stroke="#3A4A5A", fontsize=9.5):
@@ -141,34 +141,31 @@ def neurostate_figure(width: float) -> Drawing:
                 )
 
     # main flow boxes
-    box(10, 90, 96, 36, "User turn / tape", "#EEF4FB")
-    box(126, 90, 118, 36, "CPOS state update\nctx7: calm / corruption", "#E8F2EA")
-    box(266, 90, 90, 36, "Action gate", "#F3EEF8")
-    box(388, 90, 62, 36, "PASS", "#E6F6EA")
+    box(10, 104, 96, 36, "User turn", "#EEF4FB")
+    box(126, 104, 94, 36, "State", "#E8F2EA")
+    box(240, 104, 86, 36, "Gate", "#F3EEF8")
+    box(346, 104, 88, 36, "PASS", "#E6F6EA")
 
     # warning path
-    box(266, 34, 90, 36, "WARN", "#FFF1D9")
-    box(388, 34, 62, 36, "EXEC\nblock", "#FBE3E3")
+    box(240, 34, 86, 36, "WARN", "#FFF1D9")
+    box(346, 34, 88, 36, "EXEC block", "#FBE3E3")
 
     # arrows
     arrows = [
-        (106, 108, 126, 108),
-        (244, 108, 266, 108),
-        (356, 108, 388, 108),
-        (311, 90, 311, 70),
-        (356, 52, 388, 52),
-        (419, 90, 419, 70),
+        (106, 122, 126, 122),
+        (220, 122, 240, 122),
+        (326, 122, 346, 122),
+        (283, 104, 283, 70),
+        (326, 52, 346, 52),
+        (390, 104, 390, 70),
     ]
     for x1, y1, x2, y2 in arrows:
         d.add(Line(x1, y1, x2, y2, strokeColor=colors.HexColor("#4B5563"), strokeWidth=1.2))
 
     # arrow heads
-    d.add(Polygon(points=[382, 111, 388, 108, 382, 105], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
-    d.add(Polygon(points=[382, 55, 388, 52, 382, 49], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
-    d.add(Polygon(points=[263, 76, 266, 70, 269, 76], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
-
-    d.add(String(318, 78, "dangerous EXEC?", textAnchor="middle", fontName="Helvetica-Bold", fontSize=9, fillColor=colors.HexColor("#374151")))
-    d.add(String(290, 16, "C4: WARN + EXEC closes adaptive below-threshold attacks", textAnchor="middle", fontName="Helvetica", fontSize=7.8, fillColor=colors.HexColor("#555555")))
+    d.add(Polygon(points=[340, 125, 346, 122, 340, 119], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
+    d.add(Polygon(points=[340, 55, 346, 52, 340, 49], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
+    d.add(Polygon(points=[237, 73, 240, 70, 243, 73], fillColor=colors.HexColor("#4B5563"), strokeColor=colors.HexColor("#4B5563")))
     return d
 
 

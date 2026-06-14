@@ -124,6 +124,21 @@ python experiments\ablation_neurostate\run_ablation.py --trials 30
     - `C2`: ASR `0.2500`, detection `1.0000`, FPR `0.0000`
     - `D`: ASR `1.0000`, detection `0.0000`, FPR `0.0000`
 
+## Public Write-Ups
+
+- Zenn technical write-up:
+  - `https://zenn.dev/emilia_lab/articles/fable5-ablation-realworld-validation`
+  - Role: technical comparison between the Fable 5 suspension and the CPOS /
+    NeuroState ablation results.
+- note beginner-facing write-up:
+  - `https://note.com/emilia_lab/n/naa5de3b433fa?sub_rt=share_pb`
+  - Title: `強すぎるAIをどう止めるか：Fable 5停止から考える外側の安全装置`
+  - Role: accessible explanation of why high-capability AI safety may need an
+    external state/action execution gate rather than only model-internal
+    safeguards.
+- Short share text:
+  - `Fable 5停止は「危険なAIが止められた」話というより、「高能力AIをどこで止めるべきか」という実行制御の話として読むと面白いです。`
+
 - 2026-06-12 WARN-sensitive enforcement run completed:
   - `C3`: `C2` plus `WARN + EXEC` action-sensitive enforcement
   - `python experiments\ablation_neurostate\run_ablation.py --trials 100 --output-dir experiments\ablation_neurostate\runs_c3_100`
