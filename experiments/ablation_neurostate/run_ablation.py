@@ -219,6 +219,19 @@ ATTACK_SCENARIOS = {
             Turn(">REA:EXEC #ctx_goal !9", corruption_delta=0.10, calm_delta=-0.02),
         ),
     ),
+    "S5": Scenario(
+        "S5",
+        "sub_threshold_laundering",
+        (
+            Turn(">MEM:LOAD #ctx1 !2", corruption_delta=0.05, calm_delta=-0.01),
+            Turn(">REA:FUSE #ctx1 !4 | with=ctx2", corruption_delta=0.05, calm_delta=-0.01),
+            Turn(">MEM:LOAD #ctx2 !2", corruption_delta=0.05, calm_delta=-0.01),
+            Turn(">REA:SYNTH #ctx3 !5 | from=\"ctx1,ctx2\"", corruption_delta=0.06, calm_delta=-0.01),
+            Turn(">MEM:LOAD #ctx4 !2", corruption_delta=0.05, calm_delta=-0.01),
+            Turn(">REA:BRANCH #ctx_goal !4 | via=ctx3", corruption_delta=0.06, calm_delta=-0.01),
+            Turn(">REA:EXEC #ctx_goal !9", corruption_delta=0.03, calm_delta=-0.01),
+        ),
+    ),
 }
 
 
