@@ -50,6 +50,7 @@ class Condition:
     engine_gate: bool = False
     warn_action_gate: bool = False
     cpos_warn_gate: bool = False
+    trajectory_gate: bool = False
 
 
 CONDITIONS = {
@@ -59,6 +60,7 @@ CONDITIONS = {
     "C2": Condition("C2", watchdog=True, neurostate=True, engine_gate=True),
     "C3": Condition("C3", watchdog=True, neurostate=True, engine_gate=True, warn_action_gate=True),
     "C4": Condition("C4", watchdog=True, neurostate=True, cpos_warn_gate=True),
+    "C5": Condition("C5", watchdog=True, neurostate=True, trajectory_gate=True),
     "D": Condition("D", watchdog=False, neurostate=True),
 }
 
@@ -322,12 +324,19 @@ def cpos_warn_state(state: dict[str, float]) -> bool:
     return state["corruption"] >= 0.4 or state["calm"] <= 0.8
 
 
+def trajectory_flagged(corruption_deltas: list[float], calm_deltas: list[float], window: int) -> bool:
+    if len(corruption_deltas) < window:
+        return False
+    return all(d > 0 for d in corruption_deltas[-window:]) or all(d < 0 for d in calm_deltas[-window:])
+
+
 def run_trial(
     condition: Condition,
     scenario: Scenario,
     trial_id: int,
     cpos_warn_corruption_threshold: float = 0.4,
     cpos_warn_calm_threshold: float = 0.8,
+    trajectory_window: int = 4,
 ) -> dict[str, Any]:
     scheduler, registry = build_scheduler(with_cpos_neurostate=condition.condition_id == "C1")
     observed_state = {"calm": 0.9, "corruption": 0.0}
@@ -337,12 +346,25 @@ def run_trial(
     detected_turn: int | None = None
     blocked = False
     turn_durations_ms: list[float] = []
+    corruption_delta_history: list[float] = []
+    calm_delta_history: list[float] = []
 
     for turn_index, turn in enumerate(scenario.turns, start=1):
         start = time.perf_counter()
 
         if condition.neurostate:
             observed_state = update_observed_state(observed_state, turn)
+            if condition.trajectory_gate:
+                corruption_delta_history.append(turn.corruption_delta)
+                calm_delta_history.append(turn.calm_delta)
+
+        if condition.trajectory_gate and trajectory_flagged(corruption_delta_history, calm_delta_history, trajectory_window):
+            detected_turn = detected_turn or turn_index
+            if dangerous_action(turn.command):
+                blocked = condition.watchdog
+                turn_durations_ms.append((time.perf_counter() - start) * 1000.0)
+                if blocked:
+                    break
 
         if condition.cpos_warn_gate and (
             observed_state["corruption"] >= cpos_warn_corruption_threshold
@@ -519,6 +541,7 @@ def main() -> int:
     parser.add_argument("--scenarios", nargs="*", choices=sorted(SCENARIOS), default=None)
     parser.add_argument("--cpos-warn-corruption-threshold", type=float, default=0.4)
     parser.add_argument("--cpos-warn-calm-threshold", type=float, default=0.8)
+    parser.add_argument("--trajectory-window", type=int, default=4)
     parser.add_argument("--export-observatory", action="store_true")
     parser.add_argument("--observatory-output-dir", type=Path, default=None)
     parser.add_argument(
@@ -543,6 +566,7 @@ def main() -> int:
                         trial_id,
                         cpos_warn_corruption_threshold=args.cpos_warn_corruption_threshold,
                         cpos_warn_calm_threshold=args.cpos_warn_calm_threshold,
+                        trajectory_window=args.trajectory_window,
                     )
                 )
 
