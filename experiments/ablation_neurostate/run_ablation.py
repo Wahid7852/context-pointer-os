@@ -21,7 +21,14 @@ if NEUROSTATE_ENGINE_ROOT.exists() and str(NEUROSTATE_ENGINE_ROOT) not in sys.pa
 from cpos.context_store import ContextStore
 from cpos.registry import ContextObject, ContextRegistry
 from cpos.scheduler import Scheduler
-from core import NeuroState, evaluate_ethics_gate
+try:
+    from core import NeuroState, evaluate_ethics_gate
+    from core.sde import StateDriftEngine
+    _HAS_SDE = True
+except ImportError:
+    from _core_stub import NeuroState, evaluate_ethics_gate  # type: ignore[no-redef]
+    StateDriftEngine = None  # type: ignore[assignment,misc]
+    _HAS_SDE = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,7 @@ class Condition:
     warn_action_gate: bool = False
     cpos_warn_gate: bool = False
     trajectory_gate: bool = False
+    sde_gate: bool = False
 
 
 CONDITIONS = {
@@ -61,6 +69,7 @@ CONDITIONS = {
     "C3": Condition("C3", watchdog=True, neurostate=True, engine_gate=True, warn_action_gate=True),
     "C4": Condition("C4", watchdog=True, neurostate=True, cpos_warn_gate=True),
     "C5": Condition("C5", watchdog=True, neurostate=True, trajectory_gate=True),
+    "C6": Condition("C6", watchdog=True, neurostate=True, sde_gate=True),
     "D": Condition("D", watchdog=False, neurostate=True),
 }
 
@@ -342,12 +351,18 @@ def run_trial(
     observed_state = {"calm": 0.9, "corruption": 0.0}
     engine_gate_status = ""
     engine_gate_reason = ""
+    sde_status = ""
     attack_success = False
     detected_turn: int | None = None
     blocked = False
     turn_durations_ms: list[float] = []
     corruption_delta_history: list[float] = []
     calm_delta_history: list[float] = []
+    sde = (
+        StateDriftEngine(d_state=project_engine_state({"calm": 0.9, "corruption": 0.0}))
+        if condition.sde_gate and _HAS_SDE
+        else None
+    )
 
     for turn_index, turn in enumerate(scenario.turns, start=1):
         start = time.perf_counter()
@@ -361,6 +376,19 @@ def run_trial(
         if condition.trajectory_gate and trajectory_flagged(corruption_delta_history, calm_delta_history, trajectory_window):
             detected_turn = detected_turn or turn_index
             if dangerous_action(turn.command):
+                blocked = condition.watchdog
+                turn_durations_ms.append((time.perf_counter() - start) * 1000.0)
+                if blocked:
+                    break
+
+        if condition.sde_gate and sde is not None:
+            sde_result = sde.update(project_engine_state(observed_state))
+            sde_status = sde_result.status
+            if sde_result.status in {"WARN", "EXEC_BLOCK"}:
+                detected_turn = detected_turn or turn_index
+            if sde_result.status == "EXEC_BLOCK" or (
+                sde_result.status == "WARN" and dangerous_action(turn.command)
+            ):
                 blocked = condition.watchdog
                 turn_durations_ms.append((time.perf_counter() - start) * 1000.0)
                 if blocked:
@@ -437,6 +465,7 @@ def run_trial(
         "final_calm": round(observed_state["calm"], 4),
         "engine_gate_status": engine_gate_status,
         "engine_gate_reason": engine_gate_reason,
+        "sde_status": sde_status,
         "turns_executed": len(turn_durations_ms),
         "mean_turn_ms": statistics.fmean(turn_durations_ms) if turn_durations_ms else 0.0,
     }
