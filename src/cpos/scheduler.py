@@ -13,6 +13,7 @@ from .context_store import ContextStore
 from .registry import ContextObject
 from .acl import AccessControlList, Role
 from .memory_policy import RetrievalPolicy, CognitiveMode
+from .review import ReviewDraftStore
 
 class JournalIntegrity:
     """The 'Black Box' layer. Chained HMAC signatures for tamper-evidence."""
@@ -102,7 +103,12 @@ class PayloadSanitizer:
 
 class Scheduler:
     """The 'Process Manager'. Executes AIT/EAP instructions with PID isolation and Mutex."""
-    def __init__(self, store: ContextStore, acl: Optional[AccessControlList] = None):
+    def __init__(
+        self,
+        store: ContextStore,
+        acl: Optional[AccessControlList] = None,
+        review_drafts: Optional[ReviewDraftStore] = None,
+    ):
         self.store = store
         self.registry = store.registry
         self.acl = acl or AccessControlList()
@@ -113,6 +119,7 @@ class Scheduler:
         self.task_queue: List[AITInstruction] = [] 
         self.tick_count = 0 
         self.approvals = ApprovalStore()
+        self.review_drafts = review_drafts or ReviewDraftStore()
         self.approval_policy = ApprovalPolicy()
         self.retrieval_policy = RetrievalPolicy()
         
@@ -150,6 +157,72 @@ class Scheduler:
     def set_agent(self, agent_name: str, pid: int = 0):
         self.current_agent = agent_name
         self.current_pid = pid
+
+    def submit_review_draft(
+        self,
+        target_id: str,
+        content: str,
+        source_ids: List[str],
+        reason: str,
+    ) -> Dict[str, Any]:
+        draft = self.review_drafts.submit(
+            agent=self.current_agent,
+            target_id=target_id,
+            content=content,
+            source_ids=source_ids,
+            reason=reason,
+        )
+        self.registry._log_event(
+            "review_draft_submitted",
+            target_id,
+            {
+                "review_id": draft.id,
+                "agent": self.current_agent,
+                "source_ids": list(draft.source_ids),
+                "reason": reason,
+            },
+        )
+        return {
+            "status": "awaiting_review",
+            "review_id": draft.id,
+            "target_id": target_id,
+        }
+
+    def approve_review_draft(self, review_id: str) -> Dict[str, Any]:
+        if self.current_agent != "root":
+            return {"status": "error", "result": "ERR_REVIEW_APPROVAL_DENIED"}
+        draft = self.review_drafts.approve(review_id, self.registry)
+        if not draft:
+            return {"status": "error", "result": "ERR_UNKNOWN_REVIEW"}
+        self.registry._log_event(
+            "review_draft_approved",
+            draft.target_id,
+            {"review_id": draft.id, "source_ids": list(draft.source_ids)},
+        )
+        return {
+            "status": "ok",
+            "result": "REVIEW_PROMOTED",
+            "review_id": draft.id,
+            "target_id": draft.target_id,
+        }
+
+    def reject_review_draft(self, review_id: str) -> Dict[str, Any]:
+        if self.current_agent != "root":
+            return {"status": "error", "result": "ERR_REVIEW_APPROVAL_DENIED"}
+        draft = self.review_drafts.reject(review_id)
+        if not draft:
+            return {"status": "error", "result": "ERR_UNKNOWN_REVIEW"}
+        self.registry._log_event(
+            "review_draft_rejected",
+            draft.target_id,
+            {"review_id": draft.id, "source_ids": list(draft.source_ids)},
+        )
+        return {
+            "status": "ok",
+            "result": "REVIEW_REJECTED",
+            "review_id": draft.id,
+            "target_id": draft.target_id,
+        }
 
     def get_active_content(self) -> str:
         """[CPOS v0.2/v3.0] Context Reconstructor: Smartly assembles prompt content."""

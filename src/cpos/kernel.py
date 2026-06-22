@@ -8,6 +8,10 @@ from .boot import CognitiveBootloader
 from .dashboard import render_dashboard
 from .node_link import NodeLink
 from .gateway import GatewayManager
+from .review import ReviewDraftStore
+from .review_keys import WindowsReviewKeyStore, credential_target
+from typing import Any, List, Optional
+from cryptography.fernet import Fernet
 
 # [AIT Firewall v11.0 Integration]
 import sys
@@ -67,6 +71,10 @@ class CPOS:
         node_id: str = "node",
         domain: str = "local",
         approval_policy_config=None,
+        review_encryption_key: Optional[str] = None,
+        review_credential_id: Optional[str] = None,
+        create_review_credential: bool = False,
+        review_key_store: Optional[Any] = None,
     ):
         self.registry = ContextRegistry()
         self.acl = AccessControlList()
@@ -74,7 +82,26 @@ class CPOS:
         self.gateways = GatewayManager() # [CPOS v0.4] Gateway Management
         self.store = ContextStore(self.registry, self.storage)
         self.store.gateways = self.gateways # Give store access to gateways
-        self.scheduler = Scheduler(self.store, self.acl)
+        self.review_credential_target = None
+        self.review_key_store = None
+        if create_review_credential and not review_credential_id:
+            raise ValueError("create_review_credential requires review_credential_id")
+        review_key = review_encryption_key or os.environ.get("CPOS_REVIEW_KEY")
+        review_keys = [review_key] if review_key else []
+        if not review_keys and review_credential_id:
+            self.review_key_store = review_key_store or WindowsReviewKeyStore()
+            self.review_credential_target = credential_target(workspace, review_credential_id)
+            review_keys = self.review_key_store.get_keys(self.review_credential_target)
+            if not review_keys and create_review_credential:
+                review_keys = [self.review_key_store.provision(self.review_credential_target)]
+            if not review_keys:
+                raise ValueError("review credential does not exist")
+        review_drafts = (
+            ReviewDraftStore.for_workspace(workspace, review_keys)
+            if review_keys
+            else ReviewDraftStore()
+        )
+        self.scheduler = Scheduler(self.store, self.acl, review_drafts=review_drafts)
         if approval_policy_config is not None:
             self.scheduler.load_approval_policy_config(approval_policy_config)
         self.policy = MemoryPolicy(self.store, token_limit=token_limit)
@@ -96,6 +123,45 @@ class CPOS:
 
     def load_approval_policy_config(self, config_or_path):
         return self.scheduler.load_approval_policy_config(config_or_path)
+
+    def submit_review_draft(
+        self,
+        target_id: str,
+        content: str,
+        source_ids: List[str],
+        reason: str,
+        agent: str = "root",
+        pid: int = 0,
+    ):
+        self.scheduler.set_agent(agent, pid=pid)
+        return self.scheduler.submit_review_draft(target_id, content, source_ids, reason)
+
+    def approve_review_draft(self, review_id: str, agent: str = "root"):
+        self.scheduler.set_agent(agent)
+        return self.scheduler.approve_review_draft(review_id)
+
+    def reject_review_draft(self, review_id: str, agent: str = "root"):
+        self.scheduler.set_agent(agent)
+        return self.scheduler.reject_review_draft(review_id)
+
+    def rotate_review_encryption_key(self, agent: str = "root"):
+        if agent != "root":
+            return {"status": "error", "result": "ERR_REVIEW_ROTATION_DENIED"}
+        if not self.review_key_store or not self.review_credential_target:
+            return {"status": "error", "result": "ERR_OS_REVIEW_KEY_NOT_CONFIGURED"}
+        keys = self.review_key_store.get_keys(self.review_credential_target)
+        if not keys:
+            return {"status": "error", "result": "ERR_REVIEW_KEY_MISSING"}
+        old_key = keys[0]
+        new_key = Fernet.generate_key().decode("ascii")
+        self.review_key_store.begin_rotation(self.review_credential_target, new_key, old_key)
+        try:
+            self.scheduler.review_drafts.rotate_encryption_key(new_key)
+        except Exception:
+            self.review_key_store.restore(self.review_credential_target, old_key)
+            raise
+        self.review_key_store.finalize_rotation(self.review_credential_target, new_key)
+        return {"status": "ok", "result": "REVIEW_KEY_ROTATED"}
 
     def step(self, instruction: str, agent: str = "root", pid: int = 0):
         """Executes a single instruction and runs homeostasis (GC/Paging)."""
