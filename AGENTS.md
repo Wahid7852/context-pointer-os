@@ -266,6 +266,27 @@ The frozen reproduction procedure is
 run uses `qwen3:4b` model ID `359d7dd4bcda`, temperature `0.2`, seed `42`, and
 three trials per scenario.
 
+## 2026-06-22 Checkpoint
+
+Current work is committed and the worktree was clean at checkpoint time:
+
+- `7a84b43` `feat: add layered NeuroState contamination evaluation`
+- `50da8a7` `feat: add encrypted review draft quarantine`
+- `f9e010f` `docs: freeze CPOS-H results and reproduction steps`
+
+Verified state:
+
+- deterministic H: ASR `0.0000` over 1,700 attacks; FPR `0.0000` over 6,400 normal trials
+- seeded Qwen S5 variants: baseline 9/9 private egress; H blocked 9/9
+- seeded benign workflows: hard-block 0/15; review-required 6/15
+- Windows Credential Manager smoke: provision, rotation, restart recovery, cleanup passed
+- tests: `53 passed`
+
+Resume priority: do not add another defense layer first. Package the current
+results for publication/release, or add a second model only when a broader
+model claim is required. macOS/Linux secret-manager backends remain optional
+portability work.
+
 ## Existing Support Files
 
 - `experiments/ablation_neurostate/RESULTS.md`: main result narrative.

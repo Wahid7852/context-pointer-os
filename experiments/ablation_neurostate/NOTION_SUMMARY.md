@@ -201,6 +201,16 @@ Windows Credential Manager連携と鍵rotationも実装。workspace path hashで
 
 実Windows Credential Managerで一時credentialを使い、provision・rotation・再起動復旧・cleanupまで成功。残作業はmacOS/Linux向けkey manager backend。
 
+## 2026-06-22 保存地点
+
+- 実験実装: `7a84b43`
+- 暗号化Review runtime: `50da8a7`
+- 結果・再現手順: `f9e010f`
+- 全テスト: `53 passed`
+- 正式再現条件: `qwen3:4b`（model ID `359d7dd4bcda`）、temperature `0.2`、seed `42`、各3試行
+
+次回は新しい防御機能を増やすより、公開用release/paper artifactの整理を優先。別モデル追加は「単一モデル結果」から主張を広げる必要がある場合に行う。
+
 ## 現在のまとめ
 
 CPOSは前門として、入力・記憶・状態ドリフト・provenance launderingを監視する。
