@@ -64,6 +64,22 @@ treated as provisional until review/confirmation. That closes the tested
 `S12` high-trust-source and `S14` borderline-trust-source gaps that remain open
 under `G`.
 
+## C5/C6 Lineage
+
+`C5` and `C6` are the newer NeuroState-specific experimental line in the same
+harness, not obsolete rows. `C5` tests a trajectory-only trend gate over recent
+state deltas. `C6` tests the external `neurostate-engine` SDE path when that
+sibling checkout is available.
+
+The release headline is still `H` because this package is scoped as a CPOS-H
+layered-gate release: it combines state/action gating, provenance checks,
+auditing, egress control, and fresh-import review over `S1-S17`. For pure
+NeuroState evolution, `C5/C6` are important current comparison points.
+
+The public EXP-012 NeuroState multi-model ablation page should be read as the
+separate NeuroState-D/R measurement track. It complements this CPOS-H release
+rather than replacing the fixed-tape CPOS-H headline.
+
 ## Limits
 
 - The main harness uses synthetic fixed instruction tapes, not live natural
@@ -80,6 +96,7 @@ under `G`.
 
 ## Release Files
 
+- `EXPERIMENT_MAP.md`: track map for CPOS-H, C5/C6, NeuroState-D/R, and pilots
 - `README.md`: harness overview and commands
 - `RESULTS.md`: detailed result log and interpretation
 - `REPRODUCIBILITY.md`: frozen reproduction procedure

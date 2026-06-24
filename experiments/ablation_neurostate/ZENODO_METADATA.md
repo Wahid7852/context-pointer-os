@@ -49,6 +49,7 @@ deterministic CPOS result is the main evidence path.
 
 - `experiments/ablation_neurostate/CPOS-H_as_a_Layered_Pre-LLM_Execution_Gate.pdf`
 - `experiments/ablation_neurostate/PAPER_DRAFT.md`
+- `experiments/ablation_neurostate/EXPERIMENT_MAP.md`
 - `experiments/ablation_neurostate/RELEASE_SUMMARY.md`
 - `experiments/ablation_neurostate/RESULTS.md`
 - `experiments/ablation_neurostate/PAPER_OUTLINE.md`

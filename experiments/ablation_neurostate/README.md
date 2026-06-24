@@ -14,6 +14,11 @@ about all prompt injection or all natural conversations.
 See `RESULTS.md` for the current 100-trial deterministic result, Ollama pilot,
 interpretation, and limits.
 
+If the experiment set feels overloaded, start with `EXPERIMENT_MAP.md`. It
+separates the CPOS-H fixed-tape release, the newer NeuroState-specific C5/C6
+line, the public NeuroState-D/R multi-model measurement track, and the
+model-in-the-loop pilots.
+
 ## Conditions
 
 - `A`: no watchdog enforcement, no NeuroState observation
@@ -22,6 +27,8 @@ interpretation, and limits.
 - `C2`: NeuroState Engine `EthicsGate` enforcement
 - `C3`: `C2` plus `WARN + EXEC` action-sensitive enforcement
 - `C4`: CPOS-native `calm/corruption` plus `WARN + EXEC` enforcement
+- `C5`: newer NeuroState trajectory-only trend gate
+- `C6`: newer external `neurostate-engine` SDE gate
 - `E`: `C4` plus State Drift Engine (SDE) provenance/trajectory enforcement
 - `F1`: `E` plus rule-based Shadow Auditor for SDE mid-risk dangerous actions
 - `G`: `F1` plus NEMA-style egress gate for sensitive output/function execution
@@ -45,6 +52,12 @@ review while `WARN` is active.
 Condition `C4` applies the same action-sensitive idea without the external
 `neurostate-engine`: CPOS-native `calm/corruption` defines `WARN`, and `EXEC` is
 blocked while that warning state is active.
+
+Conditions `C5` and `C6` are the newer NeuroState-specific experimental line.
+`C5` is a lightweight trend detector over recent `calm/corruption` deltas.
+`C6` uses the external `neurostate-engine` SDE path when that sibling checkout
+is available. They are current NeuroState experiments and useful comparison
+points; the CPOS-H release headline remains the layered `H` result below.
 
 Condition `E` keeps the `C4` magnitude gate and adds SDE v0.1. SDE tracks
 low-trust source provenance, FUSE/SYNTH/BRANCH laundering chains, boundary

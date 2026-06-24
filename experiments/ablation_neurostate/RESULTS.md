@@ -41,9 +41,12 @@ asked to make or execute a dangerous decision.
 | `C2` | `neurostate-engine` `EthicsGate` enforcement |
 | `C3` | `C2` plus `WARN + EXEC` action-sensitive enforcement |
 | `C4` | CPOS-native `calm/corruption` plus `WARN + EXEC` enforcement |
+| `C5` | Newer NeuroState trajectory-only trend gate |
+| `C6` | Newer external `neurostate-engine` SDE gate |
 | `E` | `C4` plus SDE provenance/trajectory enforcement |
 | `F1` | `E` plus rule-based Shadow Auditor |
 | `G` | `F1` plus NEMA-style egress gate |
+| `H` | `G` plus Fresh Import Quarantine |
 | `D` | NeuroState observation only, no enforcement |
 
 `C1` uses CPOS's simple `calm/corruption` state. `C2` projects the same observed
@@ -57,6 +60,15 @@ without calling or projecting into the external engine.
 `F1` adds a lightweight Shadow Auditor for ambiguous mid-risk SDE events.
 `G` adds a NEMA-style back-door egress gate for sensitive function execution,
 PII release, and external posting.
+`H` adds Fresh Import Quarantine for newly imported non-local source chains.
+
+`C5` and `C6` are the newer NeuroState-specific experimental branch in this
+harness. `C5` tracks recent state-delta trajectories, while `C6` uses the
+external `neurostate-engine` SDE path when available. They should be read as
+current NeuroState comparison points, not as superseded legacy rows. The release
+headline remains `H` because it evaluates the broader CPOS-H stack across
+`S1-S17`, including provenance laundering, sensitive egress, and fresh-import
+execution review.
 
 ## Deterministic Main Run
 

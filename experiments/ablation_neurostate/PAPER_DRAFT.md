@@ -165,6 +165,8 @@ Condition meanings are:
 - `C2`: external `neurostate-engine` `EthicsGate`
 - `C3`: `C2` plus `WARN + EXEC` gating
 - `C4`: CPOS-native `calm/corruption` plus `WARN + EXEC` gating
+- `C5`: newer NeuroState trajectory-only trend gate
+- `C6`: newer external `neurostate-engine` SDE gate
 - `E`: `C4` plus SDE provenance/trajectory gating
 - `F1`: `E` plus rule-based Shadow Auditor
 - `G`: `F1` plus NEMA-style egress gating
@@ -173,9 +175,11 @@ Condition meanings are:
 
 `C1` and `C2` test state awareness. `C3` and `C4` test action-sensitive
 enforcement. `C4` is the lightest version because it does not need projection
-into the external engine. `E`, `F1`, `G`, and `H` test the additional controls
-needed for provenance laundering, ambiguous mid-risk actions, private egress,
-and newly imported source chains.
+into the external engine. `C5` and `C6` are the newer NeuroState-specific
+experimental line: `C5` tests state-delta trajectory detection, while `C6`
+tests the external `neurostate-engine` SDE path. `E`, `F1`, `G`, and `H` test
+the broader CPOS-H layered control stack needed for provenance laundering,
+ambiguous mid-risk actions, private egress, and newly imported source chains.
 
 ### 3.3 Auxiliary LLM Pilot
 
