@@ -3,6 +3,9 @@
 This directory now contains several related but different experiment tracks.
 Keep them separate when making claims.
 
+For the runtime/security design metaphor behind the stack, see
+`docs/AI_AGENT_AS_COMPUTER.md`.
+
 ## Track A: CPOS-H Fixed-Tape Release
 
 Primary release artifact for this repository.
