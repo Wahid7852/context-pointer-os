@@ -3,6 +3,9 @@
 This is a design note for treating an AI agent as a computer with an operating
 layer, not as a single trusted chat model.
 
+For possible product surfaces extracted from this architecture, see
+`docs/COMMERCIALIZATION_NOTES.md`.
+
 The metaphor is useful only if it changes implementation decisions. The core
 rule is:
 
