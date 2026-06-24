@@ -7,6 +7,10 @@ It intentionally does not call an LLM. Each scenario is a fixed instruction
 tape so the first pass measures CPOS instrumentation and enforcement behavior
 without model variance.
 
+Read the headline result as a fixed-tape ablation claim: CPOS-H blocks the
+evaluated scenario tapes `S1-S17` in this harness. It is not a universal claim
+about all prompt injection or all natural conversations.
+
 See `RESULTS.md` for the current 100-trial deterministic result, Ollama pilot,
 interpretation, and limits.
 

@@ -1,0 +1,88 @@
+# CPOS-H Ablation Release Summary
+
+## Scope
+
+This release reports a deterministic fixed instruction-tape ablation for the
+CPOS-H layered execution gate. The main result is not a natural-conversation
+benchmark and is not a universal prompt-injection security guarantee.
+
+Primary evidence:
+
+- fixed attack and normal instruction tapes
+- 100 repetitions per selected condition family
+- deterministic CPOS scheduler/gate behavior
+
+Supporting evidence:
+
+- small Qwen3:4b model-in-the-loop pilot
+- replay of saved model outputs through the action-sensitive quarantine policy
+
+## Headline Result
+
+Command:
+
+```powershell
+python experiments\ablation_neurostate\run_ablation.py --trials 100 --conditions G H --output-dir experiments\ablation_neurostate\runs_h_full_fresh_exec_100
+```
+
+Result:
+
+| Condition | Attack trials | Normal trials | ASR | Detection rate | Median detection turn | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `G` | 1700 | 6400 | `0.1176` | `0.8824` | 6 | `0.0000` |
+| `H` | 1700 | 6400 | `0.0000` | `1.0000` | 7 | `0.0000` |
+
+Safe headline:
+
+> In the deterministic CPOS ablation harness, CPOS-H blocked all evaluated
+> AI-native contamination scenarios `S1-S17` while preserving zero false
+> positives over 6,400 benign trials.
+
+Avoid:
+
+- "blocks all prompt injection"
+- "solves memory poisoning"
+- "guarantees safety"
+- "proves real-world robustness"
+
+## What CPOS-H Adds
+
+`H = G + Fresh Import Quarantine`
+
+Layer progression:
+
+| Condition | Added mechanism |
+| --- | --- |
+| `C4` | CPOS-native `calm/corruption` plus dangerous-action gate |
+| `E` | SDE provenance/trajectory gate |
+| `F1` | rule-based Shadow Auditor for mid-risk dangerous actions |
+| `G` | NEMA-style egress gate for PII and external posting |
+| `H` | Fresh Import Quarantine for new non-local source chains before dangerous `EXEC` |
+
+The important final change is that newly imported non-local source chains are
+treated as provisional until review/confirmation. That closes the tested
+`S12` high-trust-source and `S14` borderline-trust-source gaps that remain open
+under `G`.
+
+## Limits
+
+- The main harness uses synthetic fixed instruction tapes, not live natural
+  conversations.
+- The normal workload is handcrafted, although expanded to 6,400 deterministic
+  normal trials in the current H run.
+- `fresh_import_exec=approved` is runtime-side approval metadata in the
+  harness; the runtime review API and encrypted draft store now exist, but
+  broader product integration remains future work.
+- The NEMA-style egress gate is a harness-level policy model, not direct
+  `nema-lang` compiler/runtime integration.
+- The Qwen3:4b pilot is exploratory and single-model; it supports plausibility
+  but does not replace the deterministic tape result.
+
+## Release Files
+
+- `README.md`: harness overview and commands
+- `RESULTS.md`: detailed result log and interpretation
+- `REPRODUCIBILITY.md`: frozen reproduction procedure
+- `PAPER_DRAFT.md`: paper-style technical report draft
+- `ZENODO_METADATA.md`: upload metadata draft
+- `NOTION_SUMMARY.md`: Japanese working summary

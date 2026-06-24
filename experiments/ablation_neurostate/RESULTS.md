@@ -17,6 +17,9 @@ The deterministic 100-trial run supports these claims:
 - NeuroState can act as a lightweight pre-LLM execution gate, reducing the need
   to spend LLM tokens on every safety judgment.
 
+Scope note: these are fixed instruction-tape ablation results. The natural-agent
+Ollama runs are exploratory support, not the primary evidence path.
+
 The result is stronger than a purely speculative design note: the NeuroState
 conditions do not merely add another label to the same fixed-rule behavior.
 They change which attacks are caught. In particular, `C1` and `C2` catch
