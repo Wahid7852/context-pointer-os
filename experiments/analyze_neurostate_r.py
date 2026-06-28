@@ -12,13 +12,13 @@ Usage:
 import argparse
 import os
 import sys
-import textwrap
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
@@ -272,6 +272,178 @@ def normalization_check(deltas: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+# ── per-model PCA ────────────────────────────────────────────────────────────
+
+def run_pca_per_model(deltas: pd.DataFrame) -> pd.DataFrame:
+    """Return a summary table: one row per model with PC explained variances."""
+    rows = []
+    for model in sorted(deltas.model.unique()):
+        sub = deltas[deltas.model == model]
+        X = sub[[f"d{d}" for d in DIMS]].dropna().values
+        if len(X) < len(DIMS) + 1:
+            continue
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        pca = PCA(n_components=len(DIMS))
+        pca.fit(X_scaled)
+        evr = pca.explained_variance_ratio_
+        # effective dimensionality: smallest k such that cumulative evr >= 90%
+        eff_dim = int(np.searchsorted(np.cumsum(evr), 0.90)) + 1
+        rows.append(dict(
+            model=model, n=len(X),
+            PC1=evr[0], PC2=evr[1], PC3=evr[2],
+            eff_dim_90=eff_dim,
+        ))
+    return pd.DataFrame(rows).set_index("model")
+
+
+def fmt_per_model_pca_report(tbl: pd.DataFrame) -> str:
+    lines = [
+        "\n### Per-model PCA (PC1 explained variance — does one model drive the 1D bias?)",
+        "",
+        tbl.round(3).to_markdown(),
+        "",
+        f"**PC1 range:** {tbl['PC1'].min():.3f} – {tbl['PC1'].max():.3f}  "
+        f"(mean {tbl['PC1'].mean():.3f})",
+        f"**Effective dims (≥90% var):** "
+        f"min={tbl['eff_dim_90'].min()}, max={tbl['eff_dim_90'].max()}, "
+        f"mode={tbl['eff_dim_90'].mode().iloc[0]}",
+    ]
+    outliers = tbl[tbl["PC1"] > tbl["PC1"].mean() + tbl["PC1"].std()]
+    if not outliers.empty:
+        lines.append(
+            f"**High-1D-bias models (PC1 > mean+1σ):** {', '.join(outliers.index.tolist())}"
+        )
+    return "\n".join(lines)
+
+
+def save_per_model_pca_plot(deltas: pd.DataFrame, out_dir: str) -> str:
+    fig, ax = plt.subplots(figsize=(8, 4))
+    x = [f"PC{i+1}" for i in range(len(DIMS))]
+    for model in sorted(deltas.model.unique()):
+        sub = deltas[deltas.model == model]
+        X = sub[[f"d{d}" for d in DIMS]].dropna().values
+        if len(X) < len(DIMS) + 1:
+            continue
+        pca = PCA(n_components=len(DIMS))
+        pca.fit(StandardScaler().fit_transform(X))
+        ax.plot(x, np.cumsum(pca.explained_variance_ratio_), marker="o",
+                label=model, alpha=0.7)
+    ax.axhline(0.9, color="gray", linestyle="--", linewidth=0.8)
+    ax.set_ylabel("Cumulative explained variance")
+    ax.set_title("PCA per model — cumulative explained variance")
+    ax.legend(fontsize=7, ncol=2)
+    path = os.path.join(out_dir, "pca_per_model.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ── statistical tests ─────────────────────────────────────────────────────────
+
+def compute_final_displacement(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-trial: (final_dim - initial_dim) / n_turns — displacement rate per turn.
+
+    Normalising by n_turns removes the length confound: successful attacks can
+    terminate early (once the model complies), so raw net displacement is
+    smaller simply because the conversation was shorter, not because R drifted less.
+    """
+    rows = []
+    for (scen, model, trial), g in df.groupby(["scenario", "model", "trial"], sort=False):
+        g = g.sort_values("turn")
+        n_turns = len(g) - 1
+        if n_turns < 1:
+            continue
+        first = g[DIMS].iloc[0]
+        last = g[DIMS].iloc[-1]
+        disp = (last - first) / n_turns
+        rows.append(dict(
+            scenario=scen, model=model, trial=trial,
+            success=g["success"].iloc[0],
+            n_turns=n_turns,
+            **{f"disp_{d}": disp[d] for d in DIMS},
+        ))
+    return pd.DataFrame(rows)
+
+
+def run_stat_tests(df: pd.DataFrame) -> pd.DataFrame:
+    """Mann-Whitney U on net displacement: success=1 vs success=0, per (scenario, dim)."""
+    displacements = compute_final_displacement(df)
+    rows = []
+    for scen in sorted(displacements.scenario.unique()):
+        sub = displacements[displacements.scenario == scen]
+        s1 = sub[sub.success == 1]
+        s0 = sub[sub.success == 0]
+        for dim in DIMS:
+            col = f"disp_{dim}"
+            if len(s1) < 3 or len(s0) < 3:
+                continue
+            u_stat, p = stats.mannwhitneyu(
+                s1[col].values, s0[col].values, alternative="two-sided"
+            )
+            n1, n0 = len(s1), len(s0)
+            # rank-biserial correlation as effect size
+            r = 1 - (2 * u_stat) / (n1 * n0)
+            med1 = s1[col].median()
+            med0 = s0[col].median()
+            rows.append(dict(
+                scenario=scen, dim=dim,
+                n_success=n1, n_failed=n0,
+                med_success=med1, med_failed=med0,
+                U=u_stat, p=p, r=r,
+                sig="***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "",
+            ))
+    return pd.DataFrame(rows)
+
+
+def fmt_stat_report(stat_df: pd.DataFrame) -> str:
+    lines = [
+        "\n### Mann-Whitney U: displacement rate (Δ/turn), success vs failed",
+        "(r = rank-biserial correlation; r<0 means success group has higher per-turn rate)",
+        "",
+    ]
+    for scen in sorted(stat_df.scenario.unique()):
+        sub = stat_df[stat_df.scenario == scen].set_index("dim")
+        lines.append(f"\n**{scen}**")
+        lines.append("")
+        tbl = sub[["med_success", "med_failed", "U", "p", "r", "sig"]].round(3)
+        lines.append(tbl.to_markdown())
+        sig_dims = sub[sub["sig"] != ""].index.tolist()
+        lines.append(
+            f"\nSignificant dims (p<0.05): {', '.join(sig_dims) if sig_dims else 'none'}"
+        )
+    return "\n".join(lines)
+
+
+def save_effect_size_heatmap(stat_df: pd.DataFrame, out_dir: str) -> str:
+    scenarios = sorted(stat_df.scenario.unique())
+    pivot = stat_df.pivot(index="scenario", columns="dim", values="r").reindex(
+        columns=DIMS
+    )
+    sig_pivot = stat_df.pivot(index="scenario", columns="dim", values="sig").reindex(
+        columns=DIMS
+    )
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    im = ax.imshow(pivot.values.astype(float), vmin=-1, vmax=1, cmap="RdBu_r",
+                   aspect="auto")
+    ax.set_xticks(range(len(DIMS)))
+    ax.set_yticks(range(len(scenarios)))
+    ax.set_xticklabels(DIMS)
+    ax.set_yticklabels(scenarios)
+    for i, scen in enumerate(scenarios):
+        for j, dim in enumerate(DIMS):
+            r_val = pivot.loc[scen, dim] if not pd.isna(pivot.loc[scen, dim]) else 0
+            sig = sig_pivot.loc[scen, dim] if not pd.isna(sig_pivot.loc[scen, dim]) else ""
+            ax.text(j, i, f"{r_val:.2f}{sig}", ha="center", va="center",
+                    fontsize=8, color="white" if abs(r_val) > 0.5 else "black")
+    plt.colorbar(im, ax=ax, label="rank-biserial r")
+    ax.set_title("Effect size (r): success vs failed displacement per dim/scenario")
+    path = os.path.join(out_dir, "stat_effect_sizes.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -329,14 +501,25 @@ def main():
     trajectories = trajectory_split(df)
     print(fmt_trajectory_report(trajectories))
 
+    # ── per-model PCA ───────────────────────────────────────────────────────
+    per_model_tbl = run_pca_per_model(deltas)
+    print(fmt_per_model_pca_report(per_model_tbl))
+
+    # ── statistical tests ────────────────────────────────────────────────────
+    stat_df = run_stat_tests(df)
+    print(fmt_stat_report(stat_df))
+
     # ── figures ─────────────────────────────────────────────────────────────
     save_pca_variance_plot(pca_results, OUT_DIR)
     save_corr_heatmap(corr_all, "all", OUT_DIR)
     traj_paths = save_trajectory_plots(df, OUT_DIR)
+    per_model_path = save_per_model_pca_plot(deltas, OUT_DIR)
+    stat_path = save_effect_size_heatmap(stat_df, OUT_DIR)
 
     print(f"\nFigures saved to {OUT_DIR}/")
-    for p in [os.path.join(OUT_DIR, "pca_variance.png"),
-               os.path.join(OUT_DIR, "corr_all.png")] + traj_paths:
+    for p in ([os.path.join(OUT_DIR, "pca_variance.png"),
+                os.path.join(OUT_DIR, "corr_all.png")]
+               + traj_paths + [per_model_path, stat_path]):
         print(f"  {p}")
 
 
