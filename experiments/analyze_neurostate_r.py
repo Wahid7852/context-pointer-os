@@ -71,6 +71,7 @@ def run_pca(deltas: pd.DataFrame, label: str = "all") -> dict:
 def fmt_pca_report(r: dict) -> str:
     evr = r["evr"]
     cumulative = np.cumsum(evr)
+    loadings = r["loadings"]
     lines = [
         f"\n### PCA — {r['label']} (n={r['n']} delta vectors)",
         "",
@@ -83,7 +84,7 @@ def fmt_pca_report(r: dict) -> str:
         "",
         "**Loadings (top 3 PCs):**",
         "",
-        r["loadings"].iloc[:, :3].round(3).to_markdown(),
+        loadings.iloc[:, :3].round(3).to_markdown(),
         "",
     ]
     if evr[0] > 0.80:
@@ -92,6 +93,34 @@ def fmt_pca_report(r: dict) -> str:
         lines.append("**Result: PC1 > 60% but < 80% → dominant 1D structure, secondary components non-trivial.**")
     else:
         lines.append("**Result: PC1 < 60% → genuine multi-dimensional structure.**")
+
+    # C/D/O/E loading breakdown for PC1 and PC2
+    cdoe = ["C", "D", "O", "E"]
+    lines.append("")
+    lines.append("**C/D/O/E contributions:**")
+    for pc in ("PC1", "PC2"):
+        if pc not in loadings.columns:
+            continue
+        ranked = (
+            loadings.loc[cdoe, pc]
+            .abs()
+            .sort_values(ascending=False)
+        )
+        top = ", ".join(f"{d}({loadings.loc[d, pc]:+.3f})" for d in ranked.index)
+        lines.append(f"- {pc}: {top}")
+    d_load = loadings.loc["D", "PC1"] if "D" in loadings.index else 0
+    e_load = loadings.loc["E", "PC1"] if "E" in loadings.index else 0
+    if d_load * e_load > 0:
+        lines.append(
+            f"- D/E co-directional on PC1 "
+            f"(D={d_load:+.3f}, E={e_load:+.3f}) → collapse into one axis."
+        )
+    else:
+        lines.append(
+            f"- D/E oppose on PC1 "
+            f"(D={d_load:+.3f}, E={e_load:+.3f}) → carry independent information."
+        )
+
     return "\n".join(lines)
 
 
@@ -366,8 +395,27 @@ def compute_final_displacement(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _bh_adjust(p_vals: np.ndarray) -> np.ndarray:
+    """Benjamini-Hochberg FDR correction (manual, no extra deps)."""
+    n = len(p_vals)
+    order = np.argsort(p_vals)
+    ranks = np.empty(n, dtype=int)
+    ranks[order] = np.arange(1, n + 1)
+    adjusted = p_vals * n / ranks
+    # ensure monotonicity (step-down)
+    adjusted_sorted = adjusted[order]
+    for i in range(n - 2, -1, -1):
+        adjusted_sorted[i] = min(adjusted_sorted[i], adjusted_sorted[i + 1])
+    result = np.empty(n)
+    result[order] = adjusted_sorted
+    return np.minimum(result, 1.0)
+
+
 def run_stat_tests(df: pd.DataFrame) -> pd.DataFrame:
-    """Mann-Whitney U on net displacement: success=1 vs success=0, per (scenario, dim)."""
+    """Mann-Whitney U on net displacement: success=1 vs success=0, per (scenario, dim).
+
+    Includes Benjamini-Hochberg adjusted p-values across all scenario x dim comparisons.
+    """
     displacements = compute_final_displacement(df)
     rows = []
     for scen in sorted(displacements.scenario.unique()):
@@ -393,25 +441,44 @@ def run_stat_tests(df: pd.DataFrame) -> pd.DataFrame:
                 U=u_stat, p=p, r=r,
                 sig="***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "",
             ))
-    return pd.DataFrame(rows)
+    result = pd.DataFrame(rows)
+    if not result.empty:
+        p_adj = _bh_adjust(result["p"].values)
+        result["p_adj"] = p_adj
+        result["sig_adj"] = [
+            "***" if v < 0.001 else "**" if v < 0.01 else "*" if v < 0.05 else ""
+            for v in p_adj
+        ]
+    return result
 
 
 def fmt_stat_report(stat_df: pd.DataFrame) -> str:
     lines = [
         "\n### Mann-Whitney U: displacement rate (Δ/turn), success vs failed",
-        "(r = rank-biserial correlation; r<0 means success group has higher per-turn rate)",
+        "(r = rank-biserial; r<0 means success group has higher per-turn rate)",
+        "(p_adj = Benjamini-Hochberg adjusted across all scenario x dim comparisons)",
         "",
     ]
+    has_adj = "p_adj" in stat_df.columns
     for scen in sorted(stat_df.scenario.unique()):
         sub = stat_df[stat_df.scenario == scen].set_index("dim")
         lines.append(f"\n**{scen}**")
         lines.append("")
-        tbl = sub[["med_success", "med_failed", "U", "p", "r", "sig"]].round(3)
+        cols = ["med_success", "med_failed", "U", "p", "r", "sig"]
+        if has_adj:
+            cols += ["p_adj", "sig_adj"]
+        tbl = sub[cols].round(3)
         lines.append(tbl.to_markdown())
         sig_dims = sub[sub["sig"] != ""].index.tolist()
+        sig_adj_dims = sub[sub["sig_adj"] != ""].index.tolist() if has_adj else []
         lines.append(
             f"\nSignificant dims (p<0.05): {', '.join(sig_dims) if sig_dims else 'none'}"
         )
+        if has_adj:
+            lines.append(
+                f"Significant dims (p_adj<0.05): "
+                f"{', '.join(sig_adj_dims) if sig_adj_dims else 'none'}"
+            )
     return "\n".join(lines)
 
 
@@ -442,6 +509,89 @@ def save_effect_size_heatmap(stat_df: pd.DataFrame, out_dir: str) -> str:
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# ── stratified by model ──────────────────────────────────────────────────────
+
+def run_stat_tests_stratified_by_model(df: pd.DataFrame) -> pd.DataFrame:
+    """Mann-Whitney U on displacement rate, per (scenario, model, dim).
+
+    Rules out model-composition confound: if the pooled success/fail difference
+    holds within most individual models, it's not an artifact of different models
+    being over-represented in the two outcome groups.
+    """
+    displacements = compute_final_displacement(df)
+    rows = []
+    for scen in sorted(displacements.scenario.unique()):
+        for model in sorted(displacements.model.unique()):
+            sub = displacements[
+                (displacements.scenario == scen) & (displacements.model == model)
+            ]
+            s1 = sub[sub.success == 1]
+            s0 = sub[sub.success == 0]
+            for dim in DIMS:
+                col = f"disp_{dim}"
+                if len(s1) < 3 or len(s0) < 3:
+                    continue
+                u_stat, p = stats.mannwhitneyu(
+                    s1[col].values, s0[col].values, alternative="two-sided"
+                )
+                n1, n0 = len(s1), len(s0)
+                r = 1 - (2 * u_stat) / (n1 * n0)
+                rows.append(dict(
+                    scenario=scen, model=model, dim=dim,
+                    n_success=n1, n_failed=n0,
+                    U=u_stat, p=p, r=r,
+                    sig="***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "",
+                ))
+    return pd.DataFrame(rows)
+
+
+def fmt_stratified_stat_report(strat_df: pd.DataFrame) -> str:
+    """Consistency summary: for each (scenario, dim), how many models replicate the pooled effect."""
+    if strat_df.empty:
+        return "\n### Stratified by model: no results (insufficient data per model)."
+
+    cdoe = ["C", "D", "O", "E"]
+    lines = [
+        "\n### Mann-Whitney stratified by model (confound check)",
+        "Cell = 'k/N' where k = models with p<0.05 in the majority sign direction, N = models tested.",
+        "Majority sign = sign(median r across models for that scenario/dim.",
+        "",
+    ]
+
+    for scen in sorted(strat_df.scenario.unique()):
+        sub = strat_df[strat_df.scenario == scen]
+        lines.append(f"\n**{scen}**")
+        summary_rows = []
+        for dim in cdoe:
+            dsub = sub[sub.dim == dim]
+            if dsub.empty:
+                summary_rows.append({"dim": dim, "consistent": "—", "detail": ""})
+                continue
+            n_models = len(dsub)
+            median_r = dsub["r"].median()
+            majority_sign = np.sign(median_r)
+            # consistent = sig in the same direction as majority
+            k = int(((dsub["sig"] != "") & (np.sign(dsub["r"]) == majority_sign)).sum())
+            direction = "↑" if majority_sign > 0 else "↓"
+            r_range = f"r [{dsub['r'].min():.2f}, {dsub['r'].max():.2f}]"
+            summary_rows.append({
+                "dim": dim,
+                "consistent": f"{k}/{n_models} {direction}",
+                "r_range": r_range,
+            })
+        summary = pd.DataFrame(summary_rows).set_index("dim")
+        lines.append(summary.to_markdown())
+
+        # full per-model table
+        lines.append("")
+        detail = sub[sub.dim.isin(cdoe)][
+            ["model", "dim", "n_success", "n_failed", "r", "p", "sig"]
+        ].sort_values(["dim", "model"]).reset_index(drop=True)
+        lines.append(detail.round(3).to_markdown(index=False))
+
+    return "\n".join(lines)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -508,6 +658,9 @@ def main():
     # ── statistical tests ────────────────────────────────────────────────────
     stat_df = run_stat_tests(df)
     print(fmt_stat_report(stat_df))
+
+    strat_df = run_stat_tests_stratified_by_model(df)
+    print(fmt_stratified_stat_report(strat_df))
 
     # ── figures ─────────────────────────────────────────────────────────────
     save_pca_variance_plot(pca_results, OUT_DIR)
