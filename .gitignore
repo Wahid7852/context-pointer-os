@@ -35,3 +35,5 @@ experiments/ablation_neurostate/runs_h_fresh_exec_pilot/
 experiments/ablation_neurostate/runs_h_full_fresh_exec_100/
 experiments/ablation_neurostate/runs_h_action_sensitive_100/
 experiments/ablation_neurostate/runs_cli_judge/
+experiments/neurostate_r_traces/
+experiments/neurostate_r_analysis/
