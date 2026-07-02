@@ -34,13 +34,17 @@ Qwen3:4b model-in-the-loop pilot provides supporting external validity, but the
 deterministic CPOS result is the main evidence path.
 
 A subsequent adaptive/white-box red-team pass (scenarios `S18`, `S19`) found
-that every gate in the `H` stack keys off a single naive check,
+that every gate in the `H` stack keyed off a single naive check,
 `dangerous_action()`'s literal `>REA:EXEC` string prefix. Issuing the same
 payload under a different (but equally valid) domain prefix, or smuggling the
-literal substring `consent=true` into free-text metadata, reaches `ASR 1.0000`
+literal substring `consent=true` into free-text metadata, reached `ASR 1.0000`
 against `H` with no enforcement action and, for `S19`, no detection signal at
-all. The `S1-S17` result above should not be read as evidence against an
-attacker who has read this harness's source.
+all. Both were fixed: `dangerous_action()` now checks the parsed instruction's
+action instead of a raw prefix, and consent is now read from a structured
+field instead of free text. Re-run of `S1-S19` together at 100 trials
+post-fix: `ASR 0.0000`, `FPR 0.0000`. `S18`/`S19` remain in the harness as
+regression tests, so the `S1-S17` result above should be read as `S1-S19`
+going forward.
 
 ## Keywords
 
