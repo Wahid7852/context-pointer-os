@@ -33,17 +33,25 @@ guarantee for all prompt injection or all natural conversations. A smaller
 Qwen3:4b model-in-the-loop pilot provides supporting external validity, but the
 deterministic CPOS result is the main evidence path.
 
+A subsequent adaptive/white-box red-team pass (scenarios `S18`, `S19`) found
+that every gate in the `H` stack keys off a single naive check,
+`dangerous_action()`'s literal `>REA:EXEC` string prefix. Issuing the same
+payload under a different (but equally valid) domain prefix, or smuggling the
+literal substring `consent=true` into free-text metadata, reaches `ASR 1.0000`
+against `H` with no enforcement action and, for `S19`, no detection signal at
+all. The `S1-S17` result above should not be read as evidence against an
+attacker who has read this harness's source.
+
 ## Keywords
 
-- NeuroState
 - CPOS
 - CPOS-H
 - prompt injection
 - execution gate
 - pre-LLM safety
 - agent safety
-- stateful defense
 - deterministic harness
+- NeuroState (behavioral measurement, not itself a defense mechanism)
 
 ## Suggested Uploads
 

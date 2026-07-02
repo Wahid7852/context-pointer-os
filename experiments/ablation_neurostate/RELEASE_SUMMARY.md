@@ -38,6 +38,13 @@ Safe headline:
 > AI-native contamination scenarios `S1-S17` while preserving zero false
 > positives over 6,400 benign trials.
 
+An adaptive/white-box red-team pass (`S18` domain-prefix evasion, `S19`
+consent-substring smuggling) reaches `ASR 1.0000` against `H` — every gate in
+the stack keys off the same naive `dangerous_action()` string-prefix check.
+The `S1-S17` result holds only against attackers who don't know that. Add
+this caveat anywhere the `S1-S17`/6,400-trial number is cited until the check
+is fixed.
+
 Avoid:
 
 - "blocks all prompt injection"

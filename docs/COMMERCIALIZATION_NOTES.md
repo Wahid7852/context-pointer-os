@@ -205,3 +205,10 @@ contract.
 
 Do not try to productize every branch at once. Keep researching broadly, then
 let product work pick narrow surfaces from the research stack.
+
+The "AI agent firewall" pitch above should not be used unqualified externally.
+An adaptive/white-box red-team pass (`experiments/ablation_neurostate` `S18`,
+`S19`) found every gate in the flagship `H` stack keys off one naive string
+check, and reaches 100% attack success once that check is bypassed. Pitch
+language should say "blocks the evaluated fixed-tape scenario set," not
+"prevents unsafe execution," until that specific gap is closed.
