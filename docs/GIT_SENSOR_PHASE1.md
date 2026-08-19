@@ -235,3 +235,23 @@ PYTHONPATH=src python -m cpos.demo_v54_git_sensor
 
 The demo prints a `.git` content fingerprint before and after a full mount, three autonomous
 re-samples, and an `EXEC` attempt, then asserts they match.
+
+### Regression check against the ablation harness
+
+`experiments/ablation_neurostate/run_ablation.py` imports the real
+`cpos.scheduler.Scheduler`, so the `_auto_validate` edit was inside the blast radius of the
+frozen result set. Re-run on this branch, rebased onto `origin/main` at `7462ea2` so it
+picks up the C6 engine SDE gate fix:
+
+```
+python experiments/ablation_neurostate/run_ablation.py --trials 20 --conditions G H
+
+G  ASR 0.1176  FPR 0.0000  median detection turn 6
+H  ASR 0.0000  FPR 0.0000  median detection turn 5
+```
+
+`ASR` and `FPR` match the values recorded in `AGENTS.md`. H's median detection turn reads 5
+here against 7 in `AGENTS.md`; that shifted with the upstream C6 gate fix, not with this
+branch. The sensor change is inert for the harness by construction: `_auto_validate` only
+re-samples objects of `type="sensor"` and only in `CognitiveMode.AUTONOMOUS`, and the
+harness creates neither.
