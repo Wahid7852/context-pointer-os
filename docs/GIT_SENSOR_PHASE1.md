@@ -159,7 +159,8 @@ A subscriber that raises is caught and skipped, so one bad consumer cannot break
   The tamper-evident chain (`JournalIntegrity`) covers `scheduler.audit_log` and
   `kernel_journal.jsonl`, which is written per dispatched instruction. So the `LOAD` that
   mounts the sensor is signed, but the poll detail is not. If the world model is going to
-  make decisions on sensor history, this gap should close.
+  make decisions on sensor history, this gap should close. Agreed with aya as the
+  direction, deferred past Phase 1.
 - **Sampling is pull-only**, driven by `_auto_validate` on dispatch in autonomous mode.
   There is no timer, no watcher, no thread, and no autonomous execution.
 - **No submodule, stash, tag, or reflog observation.** Deliberately minimal.
@@ -195,20 +196,34 @@ Two small edits beyond the new class:
 target path). Anyone running the repo on another machine hits these. Not touched here.
 `GitGateway` deliberately holds no hardcoded paths.
 
-## Open questions
+## Review outcome
 
-1. Do the real specs define a `Sensor` base class this should implement? Right now
-   `GitGateway` is an `ExternalGateway`, which is the existing sensor precedent, but a
-   dedicated sensor interface would be a cleaner fit for what was described.
-2. Should sensor events be signed into the kernel journal rather than the unsigned registry
-   log? That is a design decision about how much the world model is allowed to trust its
-   own history.
-3. Is `0.6` the right default trust for repository metadata, and should it vary by field?
-   Structural facts like a commit SHA are strictly more trustworthy than a commit subject.
-4. Should the world model hold sensor history, or is the current single latest-reading
-   context object the intended shape for Phase 1?
-5. Does the goal manager expect to subscribe to `git_sensor_change`, and if so, what
-   payload shape does it want?
+Reviewed on 2026-08-19. Phase 1 scope confirmed as strictly read-only and
+observational: minimal repo state in, no autonomous action out.
+
+Settled:
+
+1. **Untrusted ingress posture accepted.** Capping `trust_score` below 1.0 and keeping free
+   text under `metadata["untrusted"]` is the intended fit for the safety model. The
+   divergence from `EnvironmentalGateway` is deliberate and stands.
+2. **No `Sensor` base class for Phase 1.** There isn't one in the repo yet, so the
+   gateway-based implementation stays as is. Revisit if a sensor interface lands later.
+3. **Signed sensor observations are the agreed direction, deferred past Phase 1.** If the
+   world model is going to reason over sensor history, those observations belong in the
+   signed kernel journal rather than the unsigned registry log.
+4. **Stale ahead/behind is acceptable** for Phase 1, on the condition that it stays
+   explicitly local/offline state and never triggers a network fetch. It does not.
+5. **`/home/mayutama` hardcoding stays untouched here.** Unrelated technical debt, tracked
+   separately.
+
+Still open:
+
+- Is `0.6` the right default trust for repository metadata, and should it vary by field?
+  A commit SHA is structurally more trustworthy than a commit subject.
+- Should the world model hold sensor history, or is a single latest-reading context object
+  the intended shape?
+- Does the goal manager expect to subscribe to `git_sensor_change`, and what payload shape
+  does it want?
 
 ## Verification
 
