@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 
+from cpos.cognitive_events import TAPE_SENSOR_EVENT
 from cpos.kernel import CPOS
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -48,16 +49,18 @@ def main():
         print("Sensor did not mount. Is this a git work tree?")
         return
 
-    print("\nStructural observation:")
+    print("\nMetadata-only observation (kagioneko.sensor_event.v1):")
     print(json.dumps(json.loads(obj.data), indent=2, sort_keys=True))
 
     print("\nProvenance posture:")
-    print(f"  source           : {obj.source}")
-    print(f"  trust_score      : {obj.trust_score}  (exec gate needs >= 1.0)")
-    print(f"  sensitivity      : {obj.sensitivity_level}")
-    print(f"  untrusted_text   : {obj.metadata['untrusted_text']}")
-    print("  quarantined text : "
-          + json.dumps(obj.metadata["untrusted"], sort_keys=True))
+    print(f"  source            : {obj.source}")
+    print(f"  trust_score       : {obj.trust_score}  (exec gate needs >= 1.0)")
+    print(f"  sensitivity       : {obj.sensitivity_level}")
+    print(f"  metadata_only     : {obj.metadata['metadata_only']}")
+    print(f"  free_text_stored  : {obj.metadata['free_text_stored']}")
+    print(f"  repo-controlled   : {obj.metadata['repo_controlled_fields']}")
+    print("  no commit subject, author name, path name, diff, or command output"
+          " is persisted anywhere.")
 
     print("\n[Scenario: Autonomous re-sampling]")
     os_kernel.step(">SEC:MODE #ctx0 !9 | mode=autonomous", agent="root")
@@ -71,11 +74,15 @@ def main():
     os_kernel.scheduler.retrieval_policy.real_world_exec_enabled = True
     print(f"  EXEC on git_self -> {os_kernel.step('>REA:EXEC #git_self !5', agent='root')}")
 
-    print("\nEmitted sensor events (kernel event log):")
+    print("\nSensor events on the Task Tape (Event Bus adapter):")
     for entry in os_kernel.registry.audit_log:
-        if str(entry.get("event", "")).startswith("git_sensor"):
-            print(f"  {entry['event']:18} {entry.get('pointer_id')} "
-                  f"{ {k: v for k, v in entry.items() if k not in ('event', 'pointer_id', 'timestamp')} }")
+        if entry.get("event") != TAPE_SENSOR_EVENT:
+            continue
+        print(f"  {entry['sensor_event_type']:22} risk={entry['risk']:<6} "
+              f"conf={entry['confidence']}  {entry['summary']}")
+        print(f"    {'':22} human_review={entry['requires_human_review']} "
+              f"execute_automatically={entry['execute_automatically']} "
+              f"next={entry['suggested_next_action']}")
 
     after = git_fingerprint(REPO_ROOT)
     print(f"\n.git fingerprint after : {after[:16]}...")
