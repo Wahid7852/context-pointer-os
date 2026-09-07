@@ -193,11 +193,19 @@ class GitGateway(ExternalGateway):
     SENSOR_SOURCE = "git_sensor"
 
     # `sensor_event_type` vocabulary from the Sensor spec that Phase 1 emits.
-    # `tag_created` and `remote_secret_risk_detected` are deliberately not
-    # emitted: no tag and no remote URL is read, see docs/GIT_SENSOR_PHASE1.md.
     SENSOR_EVENT_TYPES = frozenset({
         "git_clean", "git_dirty", "git_ahead", "git_behind",
         "git_state_changed", "git_sensor_unavailable",
+    })
+
+    # Vocabulary this sensor cannot observe: no tag and no remote URL is read.
+    # Published on the mounted pointer so a consumer reads their absence as
+    # unsupported rather than as an observed-clean result.
+    UNSUPPORTED_EVENT_TYPES = ("tag_created", "remote_secret_risk_detected")
+
+    # Bounded fault categories. Free text from a caller never reaches a summary.
+    FAULT_REASONS = frozenset({
+        "unregistered_repo_key", "malformed_repo_key", "not_a_work_tree",
     })
 
     # Full argv tuples, not just subcommands. Anything not listed is rejected.
@@ -286,16 +294,28 @@ class GitGateway(ExternalGateway):
         return event
 
     def _emit_unavailable(self, repo_key: str, reason: str) -> None:
-        """A sensor fault, not an observation of the repository."""
+        """A sensor fault, not an observation of the repository.
+
+        The reason is one of a fixed set and the key is echoed only when it
+        already matched `SAFE_KEY`, so no caller-supplied text reaches the tape.
+        """
+        assert reason in self.FAULT_REASONS, reason
+        safe_key = repo_key if (repo_key and self.SAFE_KEY.match(repo_key)) else "<invalid>"
         self._emit(
             sensor_event_type="git_sensor_unavailable",
-            subject=f"repo:{repo_key}" if repo_key else "repo:",
-            summary=f"git sensor could not read '{repo_key}': {reason}",
+            subject=f"repo:{safe_key}",
+            summary=f"git sensor could not read repository: {reason}",
             risk="medium",
             confidence=self.CONFIDENCE_LOCAL,
-            source_of_truth=[p] if (p := self.repos.get(repo_key)) else [],
+            source_of_truth=self._source_of_truth(repo_key),
             suggested_next_action="check_sensor_configuration",
         )
+
+    def _source_of_truth(self, repo_key: str) -> List[str]:
+        """A logical pointer, not a host path: portable and leaks no layout."""
+        if repo_key and self.SAFE_KEY.match(repo_key) and repo_key in self.repos:
+            return [f"ptr://ext.git/{repo_key}"]
+        return []
 
     # --- read-only execution chokepoint --------------------------------
 
@@ -375,8 +395,11 @@ class GitGateway(ExternalGateway):
         compound state.
         """
         subject = f"repo:{obs['repo']}"
-        truth = [self.repos[obs["repo"]]] if obs["repo"] in self.repos else []
+        truth = self._source_of_truth(obs["repo"])
         summary = self._state_summary(obs)
+        # Branch names are written by whoever wrote the repository. Marked at
+        # the contract level so a consumer of the envelope alone still knows.
+        untrusted = ["observation.branch"] if obs["branch"] is not None else []
         events: List[dict] = []
 
         if obs["dirty"]:
@@ -432,6 +455,7 @@ class GitGateway(ExternalGateway):
                 source_of_truth=truth,
                 observed_at=obs["observed_at"],
                 observation=obs,
+                untrusted_fields=untrusted,
                 # Nothing Phase 1 observes reaches a Human Escalation trigger:
                 # no credential exposure check, no push, tag, or release action.
                 requires_human_review=False,
@@ -446,12 +470,12 @@ class GitGateway(ExternalGateway):
         """Take one read-only, metadata-only reading of a registered repository."""
         repo_path = self.repos.get(repo_key)
         if not repo_path:
-            self._emit_unavailable(repo_key, "unregistered repo key")
+            self._emit_unavailable(repo_key, "unregistered_repo_key")
             return None
 
         rc, out, err = self._run_git(repo_path, ["rev-parse", "--is-inside-work-tree"])
         if rc != 0 or out != "true":
-            self._emit_unavailable(repo_key, "not a git work tree")
+            self._emit_unavailable(repo_key, "not_a_work_tree")
             return None
 
         obs: Dict[str, Any] = {
@@ -528,7 +552,7 @@ class GitGateway(ExternalGateway):
         # path format: <repo_key>
         repo_key = path.strip("/").split("/")[0]
         if not repo_key or not self.SAFE_KEY.match(repo_key):
-            self._emit_unavailable(repo_key, "malformed repo key")
+            self._emit_unavailable(repo_key, "malformed_repo_key")
             return None
 
         obs = self.snapshot(repo_key)
@@ -568,6 +592,8 @@ class GitGateway(ExternalGateway):
                 # Branch names are written by whoever wrote the repository.
                 "untrusted_text": True,
                 "repo_controlled_fields": ["branch"],
+                # Absence of these is unsupported, not observed-clean.
+                "unsupported_event_types": list(self.UNSUPPORTED_EVENT_TYPES),
                 "branch_label": branch_label,
                 "upstream_tracked": obs["upstream_tracked"],
                 "requires_human_review": False,

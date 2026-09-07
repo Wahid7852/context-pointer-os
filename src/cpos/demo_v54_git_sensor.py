@@ -59,6 +59,8 @@ def main():
     print(f"  metadata_only     : {obj.metadata['metadata_only']}")
     print(f"  free_text_stored  : {obj.metadata['free_text_stored']}")
     print(f"  repo-controlled   : {obj.metadata['repo_controlled_fields']}")
+    print(f"  unsupported       : {obj.metadata['unsupported_event_types']}"
+          "  (absence means unobserved, not clean)")
     print("  no commit subject, author name, path name, diff, or command output"
           " is persisted anywhere.")
 
@@ -83,6 +85,8 @@ def main():
         print(f"    {'':22} human_review={entry['requires_human_review']} "
               f"execute_automatically={entry['execute_automatically']} "
               f"next={entry['suggested_next_action']}")
+        print(f"    {'':22} source_of_truth={entry['source_of_truth']} "
+              f"untrusted_fields={entry['untrusted_fields']}")
 
     after = git_fingerprint(REPO_ROOT)
     print(f"\n.git fingerprint after : {after[:16]}...")
