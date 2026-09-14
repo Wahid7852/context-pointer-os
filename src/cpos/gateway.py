@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List, Callable, Tuple
 from .registry import ContextObject
 from .storage import DeviceDriver
 from .cognitive_events import (
+    GIT_SENSOR_CONTRACT,
     SENSOR_EVENT_SCHEMA,
     build_sensor_event,
     task_tape_sink,
@@ -193,10 +194,8 @@ class GitGateway(ExternalGateway):
     SENSOR_SOURCE = "git_sensor"
 
     # `sensor_event_type` vocabulary from the Sensor spec that Phase 1 emits.
-    SENSOR_EVENT_TYPES = frozenset({
-        "git_clean", "git_dirty", "git_ahead", "git_behind",
-        "git_state_changed", "git_sensor_unavailable",
-    })
+    # Owned by the contract so the adapter enforces the same set.
+    SENSOR_EVENT_TYPES = GIT_SENSOR_CONTRACT.event_types
 
     # Vocabulary this sensor cannot observe: no tag and no remote URL is read.
     # Published on the mounted pointer so a consumer reads their absence as

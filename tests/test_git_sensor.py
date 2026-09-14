@@ -7,6 +7,8 @@ import time
 import pytest
 
 from cpos.cognitive_events import (
+    GIT_SENSOR_CONTRACT,
+    SENSOR_CONTRACTS,
     SENSOR_EVENT_SCHEMA,
     TAPE_SENSOR_EVENT,
     SensorEventContractError,
@@ -66,6 +68,27 @@ def git_manifest(repo):
                 continue
             manifest[rel] = (len(blob), hashlib.sha256(blob).hexdigest())
     return manifest
+
+
+def git_observation(**overrides):
+    """A complete, valid git_sensor observation for contract tests."""
+    obs = {
+        "repo": "r", "observed_at": "2026-09-15T00:00:00+00:00", "branch": "main",
+        "detached": False, "head_short": "0123456789ab", "dirty": False,
+        "dirty_count": 0, "untracked_count": 0, "upstream_tracked": False,
+        "ahead": None, "behind": None, "commit_ts": 1757894400,
+    }
+    obs.update(overrides)
+    return obs
+
+
+def git_event(**kw):
+    base = dict(
+        sensor_event_type="git_clean", source="git_sensor",
+        subject="repo:r", summary="clean",
+    )
+    base.update(kw)
+    return build_sensor_event(**base)
 
 
 # --- snapshot behavior -----------------------------------------------------
@@ -501,18 +524,107 @@ def test_observation_values_must_be_bounded_scalars():
         build_sensor_event(observation={"branch": "b" * 300}, **ok)
 
 
-def test_untrusted_fields_must_name_a_present_field():
-    ok = dict(
-        sensor_event_type="git_clean", source="git_sensor",
-        subject="repo:r", summary="clean",
-    )
-    with pytest.raises(SensorEventContractError):
-        build_sensor_event(untrusted_fields=["observation.nope"], **ok)
+def test_provenance_is_dictated_by_the_contract_not_the_producer():
+    """A present untrusted field must be declared; nothing else may be."""
+    obs = git_observation(branch="repo-controlled")
 
-    event = build_sensor_event(
-        observation={"branch": "main"}, untrusted_fields=["observation.branch"], **ok
-    )
+    # Omitting the marker is refused, so a producer cannot launder branch text.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=obs, untrusted_fields=[])
+
+    # Declaring a field the contract does not mark untrusted is refused too.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=obs, untrusted_fields=["observation.branch", "observation.repo"])
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=obs, untrusted_fields=["observation.nope"])
+
+    event = git_event(observation=obs, untrusted_fields=["observation.branch"])
     assert event["untrusted_fields"] == ["observation.branch"]
+
+    # Detached HEAD: no branch, so the marker must be empty, not stale.
+    detached = git_observation(branch=None, detached=True)
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=detached, untrusted_fields=["observation.branch"])
+    assert git_event(observation=detached, untrusted_fields=[])["untrusted_fields"] == []
+
+
+def test_observation_schema_is_closed_per_source():
+    """The exact key set is fixed by the contract: nothing extra, nothing missing."""
+    # An undeclared key under a neutral name is refused.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=git_observation(note="FAKE_SENSITIVE_PAYLOAD"),
+                  untrusted_fields=["observation.branch"])
+    # A partial observation is refused: the shape is exact, not a subset.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation={"branch": "main"}, untrusted_fields=["observation.branch"])
+    # The full declared shape passes.
+    git_event(observation=git_observation(), untrusted_fields=["observation.branch"])
+
+
+def test_observation_field_types_and_forms_are_enforced():
+    good = git_observation()
+    for key, bad in (
+        ("dirty", "false"),
+        ("dirty", 0),
+        ("dirty_count", True),
+        ("dirty_count", "3"),
+        ("dirty_count", -1),
+        ("ahead", 1.5),
+        ("head_short", "not-hex"),
+        ("head_short", "0123456789abcdef"),
+        ("repo", "../../etc"),
+        ("repo", "a" * 65),
+        ("branch", 42),
+        ("branch", "b" * 300),
+        ("observed_at", None),
+    ):
+        obs = dict(good, **{key: bad})
+        with pytest.raises(SensorEventContractError):
+            git_event(observation=obs, untrusted_fields=["observation.branch"])
+
+
+def test_unknown_source_is_refused_at_the_boundary():
+    with pytest.raises(SensorEventContractError):
+        build_sensor_event(
+            sensor_event_type="git_clean", source="rogue_sensor",
+            subject="repo:r", summary="clean",
+        )
+    # No registration API exists to widen the accepted producer set.
+    assert not hasattr(SENSOR_CONTRACTS, "register")
+    assert set(SENSOR_CONTRACTS) == {"git_sensor"}
+
+
+def test_event_type_and_subject_are_enforced_by_the_contract():
+    with pytest.raises(SensorEventContractError):
+        git_event(sensor_event_type="git_pushed")
+    with pytest.raises(SensorEventContractError):
+        git_event(subject="repo:../../etc")
+    with pytest.raises(SensorEventContractError):
+        git_event(subject="anything")
+    assert GIT_SENSOR_CONTRACT.event_types == GitGateway.SENSOR_EVENT_TYPES
+
+
+def test_source_of_truth_must_be_a_logical_pointer():
+    for bad in (
+        "/home/anon/context-pointer-os",
+        "C:\\Users\\anon\\repo",
+        "https://user:token@github.com/x/y.git",
+        "ptr://ext.git/../../etc",
+        "ptr://ext.git/r?token=abc",
+        "ptr://" + "a" * 300,
+        "NEXT_HANDOFF.md",
+    ):
+        with pytest.raises(SensorEventContractError):
+            git_event(source_of_truth=[bad])
+    with pytest.raises(SensorEventContractError):
+        git_event(source_of_truth=["ptr://ext.git/r"] * 9)
+    assert git_event(source_of_truth=["ptr://ext.git/r"])["source_of_truth"] == ["ptr://ext.git/r"]
+
+
+def test_confidence_rejects_nan_and_infinity():
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(SensorEventContractError):
+            git_event(confidence=bad)
 
 
 def test_branch_is_marked_untrusted_on_the_envelope_not_only_the_pointer(tmp_path):

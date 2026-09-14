@@ -10,14 +10,20 @@ Out of scope here: the Goal Manager, the World Model, and the other
 Event Bus boundary is a named seam rather than an implicit one, not to
 start those components.
 
-The contract is closed. A record carrying a field that is not in
-`FIELD_TYPES` is refused, so the metadata-only boundary holds for any
-producer, not only for the Git sensor.
+The contract is closed at every level. The top-level field set is frozen
+(`FIELD_TYPES`). Each `source` has a static `SensorContract` that freezes
+its event vocabulary, its subject form, and the exact typed key set of its
+`observation`. Provenance is schema-driven: a field the contract marks as
+untrusted must be named in `untrusted_fields` whenever it is present, and
+nothing else may be. There is no registration API, so the set of accepted
+producers cannot be widened at runtime.
 """
 
+import math
+import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 SENSOR_EVENT_SCHEMA = "kagioneko.sensor_event.v1"
 
@@ -57,8 +63,9 @@ FIELD_TYPES: Dict[str, Any] = {
     "requires_human_review": bool,
     "suggested_next_action": str,
     # Contract-level provenance: dotted paths naming fields whose value is
-    # written by an untrusted producer (a repository, a remote peer). A
-    # consumer must not render these as trusted prose.
+    # written by an untrusted producer (a repository, a remote peer). Which
+    # paths must appear here is decided by the source's contract, not by
+    # the producer.
     "untrusted_fields": list,
     "metadata_only": bool,
     "raw_request_stored": bool,
@@ -67,36 +74,106 @@ FIELD_TYPES: Dict[str, Any] = {
     "secret_values_stored": bool,
     "execute_automatically": bool,
     # Additive extension: the state labels and counts the Event Bus spec tells
-    # sensors to store, which the published envelope has no slot for.
+    # sensors to store. Its exact key set is fixed per source, below.
     "observation": dict,
 }
 
 REQUIRED_FIELDS = tuple(f for f in FIELD_TYPES if f != "observation")
 
-# Events are evidence pointers, not evidence dumps. A field name carrying any
-# of these substrings is a raw-output log leaking onto the tape.
-DENIED_KEY_PARTS = (
-    "raw", "stdout", "stderr", "diff", "patch", "body", "content",
-    "secret", "token", "password", "credential", "key", "env",
-)
+# Logical pointers only. An absolute host path, a URL with credentials, or a
+# free-form string is not a source of truth the tape may carry.
+# A segment is a bounded identifier; dot-only segments (`.`, `..`) are refused.
+_SEGMENT = r"(?!\.+(?:/|$))[A-Za-z0-9_.\-]+"
+SOURCE_OF_TRUTH_PATTERN = re.compile(rf"^ptr://{_SEGMENT}(?:/{_SEGMENT})*$")
+MAX_SOURCE_OF_TRUTH_LEN = 200
+MAX_SOURCE_OF_TRUTH_ENTRIES = 8
 
-# An observation value is a state label, a count, or a timestamp. Nesting or an
-# unbounded string is a blob in disguise.
-OBSERVATION_VALUE_TYPES = (str, int, float, bool, type(None))
-MAX_OBSERVATION_VALUE_LEN = 256
+MAX_TEXT_LEN = 512          # summary, subject, suggested_next_action
+MAX_OBSERVATION_STR_LEN = 256
+
+# Shared identifier grammar for repository keys and similar handles.
+IDENT = r"[A-Za-z0-9_-]{1,64}"
 
 
 class SensorEventContractError(ValueError):
     """A record does not conform to `kagioneko.sensor_event.v1`."""
 
 
+# --- per-source contracts ------------------------------------------------
+
+class ObservationField:
+    """One allowlisted observation key: its type, nullability, and provenance."""
+
+    __slots__ = ("type", "nullable", "untrusted", "pattern")
+
+    def __init__(self, type_, *, nullable=False, untrusted=False, pattern=None):
+        self.type = type_
+        self.nullable = nullable
+        self.untrusted = untrusted
+        self.pattern = re.compile(pattern) if pattern else None
+
+
+class SensorContract:
+    """Everything a given `source` is allowed to put on the tape."""
+
+    __slots__ = ("source", "event_types", "subject_pattern", "observation")
+
+    def __init__(self, source, event_types, subject_pattern, observation):
+        self.source = source
+        self.event_types = frozenset(event_types)
+        self.subject_pattern = re.compile(subject_pattern)
+        self.observation: Dict[str, ObservationField] = dict(observation)
+
+    @property
+    def untrusted_paths(self) -> Tuple[str, ...]:
+        return tuple(f"observation.{k}" for k, f in self.observation.items() if f.untrusted)
+
+
+GIT_SENSOR_CONTRACT = SensorContract(
+    source="git_sensor",
+    # Vocabulary from docs/SENSOR_AND_GOAL_MANAGER_SPEC.md plus the documented
+    # fault extension. See docs/GIT_SENSOR_PHASE1.md.
+    event_types=(
+        "git_clean", "git_dirty", "git_ahead", "git_behind",
+        "git_state_changed", "git_sensor_unavailable",
+    ),
+    subject_pattern=rf"^repo:(?:{IDENT}|<invalid>)$",
+    observation={
+        "repo":             ObservationField(str, pattern=rf"^{IDENT}$"),
+        "observed_at":      ObservationField(str),
+        # Repository-controlled free text: the only untrusted field.
+        "branch":           ObservationField(str, nullable=True, untrusted=True),
+        "detached":         ObservationField(bool),
+        "head_short":       ObservationField(str, nullable=True, pattern=r"^[0-9a-f]{12}$"),
+        "dirty":            ObservationField(bool),
+        "dirty_count":      ObservationField(int),
+        "untracked_count":  ObservationField(int),
+        "upstream_tracked": ObservationField(bool),
+        "ahead":            ObservationField(int, nullable=True),
+        "behind":           ObservationField(int, nullable=True),
+        "commit_ts":        ObservationField(int, nullable=True),
+    },
+)
+
+# Static and closed. Adding a sensor means adding a contract here, in code,
+# under review. There is deliberately no register() call.
+SENSOR_CONTRACTS: Dict[str, SensorContract] = {
+    GIT_SENSOR_CONTRACT.source: GIT_SENSOR_CONTRACT,
+}
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat()
 
 
-def _denied(name: str) -> bool:
-    lowered = name.lower()
-    return any(part in lowered for part in DENIED_KEY_PARTS)
+def _is_int(value: Any) -> bool:
+    # bool is a subclass of int and must not pass as a count.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
 
 
 def build_sensor_event(
@@ -140,7 +217,7 @@ def build_sensor_event(
     return event
 
 
-def _validate_types(event: Dict[str, Any]) -> None:
+def _validate_top_level(event: Dict[str, Any]) -> None:
     unknown = sorted(set(event) - set(FIELD_TYPES))
     if unknown:
         raise SensorEventContractError(
@@ -157,40 +234,99 @@ def _validate_types(event: Dict[str, Any]) -> None:
             if not isinstance(value, bool):
                 raise SensorEventContractError(f"{field} must be a bool, got {value!r}")
         elif expected is float:
-            # bool is a subclass of int, so it has to be excluded explicitly.
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise SensorEventContractError(f"{field} must be a number, got {value!r}")
+            if not _is_number(value):
+                raise SensorEventContractError(
+                    f"{field} must be a finite number, got {value!r}"
+                )
         elif not isinstance(value, expected):
             raise SensorEventContractError(
                 f"{field} must be {expected.__name__}, got {type(value).__name__}"
             )
+    for field in ("subject", "summary", "suggested_next_action"):
+        if len(event[field]) > MAX_TEXT_LEN:
+            raise SensorEventContractError(f"{field} exceeds {MAX_TEXT_LEN} characters")
 
 
-def _validate_observation(event: Dict[str, Any]) -> None:
-    for key, value in (event.get("observation") or {}).items():
-        if not isinstance(key, str):
-            raise SensorEventContractError(f"observation key must be a string: {key!r}")
-        if _denied(key):
+def _validate_source_of_truth(entries: List[str]) -> None:
+    if len(entries) > MAX_SOURCE_OF_TRUTH_ENTRIES:
+        raise SensorEventContractError("too many source_of_truth entries")
+    for entry in entries:
+        if not isinstance(entry, str):
+            raise SensorEventContractError("source_of_truth entries must be strings")
+        if len(entry) > MAX_SOURCE_OF_TRUTH_LEN or not SOURCE_OF_TRUTH_PATTERN.match(entry):
             raise SensorEventContractError(
-                f"observation key {key!r} looks like raw evidence, not metadata"
+                f"source_of_truth must be a logical ptr:// pointer, got {entry!r}"
             )
-        if not isinstance(value, OBSERVATION_VALUE_TYPES):
+
+
+def _validate_observation(contract: SensorContract, event: Dict[str, Any]) -> None:
+    obs = event.get("observation")
+    if obs is None:
+        return
+    unknown = sorted(set(obs) - set(contract.observation))
+    if unknown:
+        raise SensorEventContractError(
+            f"observation keys not declared by the {contract.source} contract: {unknown}"
+        )
+    missing = sorted(set(contract.observation) - set(obs))
+    if missing:
+        raise SensorEventContractError(
+            f"observation is missing keys required by the {contract.source} contract: {missing}"
+        )
+    for key, spec in contract.observation.items():
+        value = obs[key]
+        if value is None:
+            if not spec.nullable:
+                raise SensorEventContractError(f"observation.{key} may not be null")
+            continue
+        if spec.type is bool:
+            ok = isinstance(value, bool)
+        elif spec.type is int:
+            ok = _is_int(value)
+        elif spec.type is float:
+            ok = _is_number(value)
+        else:
+            ok = isinstance(value, spec.type)
+        if not ok:
             raise SensorEventContractError(
-                f"observation value for {key!r} must be a scalar, "
-                f"got {type(value).__name__}"
+                f"observation.{key} must be {spec.type.__name__}, got {value!r}"
             )
-        if isinstance(value, str) and len(value) > MAX_OBSERVATION_VALUE_LEN:
-            raise SensorEventContractError(
-                f"observation value for {key!r} exceeds "
-                f"{MAX_OBSERVATION_VALUE_LEN} characters"
-            )
+        if isinstance(value, str):
+            if len(value) > MAX_OBSERVATION_STR_LEN:
+                raise SensorEventContractError(
+                    f"observation.{key} exceeds {MAX_OBSERVATION_STR_LEN} characters"
+                )
+            if spec.pattern and not spec.pattern.match(value):
+                raise SensorEventContractError(
+                    f"observation.{key} does not match its declared form"
+                )
+        if isinstance(value, int) and not isinstance(value, bool) and value < 0:
+            raise SensorEventContractError(f"observation.{key} must not be negative")
+
+
+def _validate_provenance(contract: SensorContract, event: Dict[str, Any]) -> None:
+    """`untrusted_fields` is dictated by the contract, not chosen by the producer."""
+    declared = event["untrusted_fields"]
+    for path in declared:
+        if not isinstance(path, str):
+            raise SensorEventContractError("untrusted_fields entries must be strings")
+    obs = event.get("observation") or {}
+    required = [
+        path for path in contract.untrusted_paths
+        if obs.get(path.split(".", 1)[1]) is not None
+    ]
+    if sorted(declared) != sorted(required):
+        raise SensorEventContractError(
+            f"untrusted_fields must be exactly {required} for {contract.source}, "
+            f"got {declared}"
+        )
 
 
 def validate_sensor_event(event: Dict[str, Any]) -> None:
     """Reject anything that is not a conforming metadata-only sensor record."""
     if not isinstance(event, dict):
         raise SensorEventContractError("event must be a mapping")
-    _validate_types(event)
+    _validate_top_level(event)
 
     if event["schema"] != SENSOR_EVENT_SCHEMA:
         raise SensorEventContractError(f"unexpected schema: {event['schema']!r}")
@@ -198,13 +334,23 @@ def validate_sensor_event(event: Dict[str, Any]) -> None:
         raise SensorEventContractError(
             f"event_type must be 'sensor_event', got {event['event_type']!r}"
         )
-    if not event["sensor_event_type"]:
-        raise SensorEventContractError("sensor_event_type must be concrete")
-    if not event["source"]:
-        raise SensorEventContractError("source must name a concrete sensor")
+
+    contract = SENSOR_CONTRACTS.get(event["source"])
+    if contract is None:
+        raise SensorEventContractError(
+            f"source {event['source']!r} has no sensor contract; refusing to persist"
+        )
+    if event["sensor_event_type"] not in contract.event_types:
+        raise SensorEventContractError(
+            f"{event['sensor_event_type']!r} is not in the {contract.source} vocabulary"
+        )
+    if not contract.subject_pattern.match(event["subject"]):
+        raise SensorEventContractError(
+            f"subject {event['subject']!r} does not match the {contract.source} form"
+        )
     if event["risk"] not in RISK_LEVELS:
         raise SensorEventContractError(f"unknown risk level: {event['risk']!r}")
-    if not 0.0 <= float(event["confidence"]) <= 1.0:
+    if not 0.0 <= event["confidence"] <= 1.0:
         raise SensorEventContractError("confidence must be within 0.0..1.0")
 
     for field, expected in SAFETY_INVARIANTS.items():
@@ -213,31 +359,9 @@ def validate_sensor_event(event: Dict[str, Any]) -> None:
                 f"safety field {field} must be {expected}, got {event[field]!r}"
             )
 
-    for entry in event["source_of_truth"]:
-        if not isinstance(entry, str):
-            raise SensorEventContractError("source_of_truth entries must be strings")
-
-    for path in event["untrusted_fields"]:
-        if not isinstance(path, str):
-            raise SensorEventContractError("untrusted_fields entries must be strings")
-        if _resolve_path(event, path) is _MISSING:
-            raise SensorEventContractError(
-                f"untrusted_fields names a field that is not present: {path!r}"
-            )
-
-    _validate_observation(event)
-
-
-_MISSING = object()
-
-
-def _resolve_path(event: Dict[str, Any], path: str) -> Any:
-    current: Any = event
-    for segment in path.split("."):
-        if not isinstance(current, dict) or segment not in current:
-            return _MISSING
-        current = current[segment]
-    return current
+    _validate_source_of_truth(event["source_of_truth"])
+    _validate_observation(contract, event)
+    _validate_provenance(contract, event)
 
 
 def task_tape_sink(registry, pointer_id_for: Any = None):

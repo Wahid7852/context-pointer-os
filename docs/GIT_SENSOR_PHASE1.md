@@ -77,45 +77,59 @@ Every observation is emitted as a `kagioneko.sensor_event.v1` record built by
 Event Bus mapping section. The concrete observation lives only in `sensor_event_type`.
 
 `source_of_truth` carries a logical pointer, `ptr://ext.git/<repo_key>`, not an absolute
-host path. The pointer is portable across machines and leaks no filesystem layout.
+host path. The pointer is portable across machines and leaks no filesystem layout. This is
+enforced at the boundary, not only by the built-in producer: every entry must match
+`ptr://<segment>(/<segment>)*` with a bounded identifier charset, no dot-only segments, no
+query string, at most 200 characters and at most 8 entries. The spec's relative-document
+form (`NEXT_HANDOFF.md`) is not accepted yet; it can be added when a document sensor
+exists and defines what a document pointer looks like.
 
 **Two additive fields: `observation` and `untrusted_fields`.**
 
 `observation` holds the state labels and counts the Event Bus spec tells sensors to store
 ("IDs, timestamps, short summaries, hashes/sizes/counts, risk levels, state labels"), which
 the published envelope has no slot for. Rather than flatten them into fields the spec names,
-or lose them to the summary string, they sit in a sub-object. Values must be bounded
-scalars: no nesting, and no string over 256 characters, so the field cannot become a blob
-carrier.
+or lose them to the summary string, they sit in a sub-object. **Its key set is exact, not
+open.** Each `source` has a static `SensorContract` that declares every observation key
+with its type, nullability, form, and provenance. A record whose observation has an
+undeclared key, a missing key, a wrong type, a negative count, a malformed short hash, or
+an over-long string is refused. A denylist was the previous mechanism and was the wrong
+shape: it bounded blob size but left the schema open under any neutral key.
 
-`untrusted_fields` is the contract-level provenance marker. It holds dotted paths naming
-fields whose value was written by an untrusted producer, currently
-`["observation.branch"]`. Previously the untrusted marking lived only on the
-`ContextObject`, so a consumer reading the envelope alone had no way to know the branch
-label was repository-controlled. A consumer must not render a marked field as trusted
-prose. The alternative, storing an opaque hash of the branch, was rejected because the
-World Model spec wants a readable branch in its repo-state facts
+`untrusted_fields` is the contract-level provenance marker: dotted paths naming fields
+whose value was written by an untrusted producer. **It is dictated by the contract, not
+chosen by the producer.** The Git contract marks `observation.branch` as untrusted, so
+`untrusted_fields` must be exactly `["observation.branch"]` whenever a branch is present
+and exactly `[]` when it is not (detached HEAD). Omitting the marker, or declaring a field
+the contract does not mark, is refused. A consumer must not render a marked field as
+trusted prose. The alternative, storing an opaque hash of the branch, was rejected because
+the World Model spec wants a readable branch in its repo-state facts
 (`repo:cpos_defensive_agent state=clean branch=main`).
 
-### The contract is closed
+### The contract is closed at every level
 
-`FIELD_TYPES` freezes the complete top-level field set with its required type.
-`validate_sensor_event()` runs inside the builder and again inside the Task Tape adapter,
-and rejects a record that:
+Three layers, all static, all enforced in the adapter as well as the builder:
 
-- carries **any** field not in the frozen set, so an alternate or hand-built producer cannot
-  widen the envelope and ride an extra field through the adapter into storage
-- is missing a required field, or carries the wrong schema or `event_type`
-- has a field of the wrong type. `confidence` must be a real number, so the string `"0.5"`
-  and the bool `True` are both refused; `requires_human_review` must be a bool, not the
-  string `"false"`; `source_of_truth` and `untrusted_fields` must be lists of strings
-- uses a non-concrete `sensor_event_type` or `source`, an out-of-range confidence, or an
-  unknown risk level
-- has any of the six safety fields flipped away from its required value
-- names a field in `untrusted_fields` that is not actually present
-- carries a key that looks like raw evidence (`raw`, `stdout`, `stderr`, `diff`, `patch`,
-  `body`, `content`, `secret`, `token`, `password`, `credential`, `key`, `env`), or an
-  observation value that is nested or unbounded
+**Top level.** `FIELD_TYPES` freezes the complete field set with its required type. Any
+field outside it is refused. `confidence` must be a finite real number, so `"0.5"`, `True`,
+`NaN` and `inf` are all refused; `requires_human_review` must be a bool, not `"false"`;
+list fields must be lists of strings; free-text fields are bounded at 512 characters.
+
+**Per source.** `SENSOR_CONTRACTS` maps each accepted `source` to a `SensorContract` that
+freezes its `sensor_event_type` vocabulary, its `subject` form
+(`repo:<identifier>` or `repo:<invalid>` for Git), and the exact typed key set of its
+`observation`. A `source` with no contract is refused outright. There is deliberately no
+registration function: adding a producer means adding a contract in code, under review,
+and a mutable registry would itself have been a widening vector.
+
+**Provenance.** `untrusted_fields` must equal exactly the set of contract-marked fields
+that are present. A producer can neither omit the marker nor invent one.
+
+Together these mean an alternate or hand-built producer cannot widen the envelope at the
+top level, cannot smuggle a payload under a neutral observation key, cannot launder
+repository-controlled text as trusted, and cannot put a host path or credential-bearing
+URL into `source_of_truth`. Each of those has a regression test that asserts
+`registry.audit_log == []` after the refused write.
 
 Validating in the adapter as well as the builder is the load-bearing half: the adapter is
 the boundary every producer crosses, so a record built by hand or by a future sensor is
@@ -133,7 +147,9 @@ refused rather than persisted.
 | `git_sensor_unavailable` | sensor fault: unregistered key, malformed key, not a work tree | medium | 1.0 | `check_sensor_configuration` |
 
 All six terms except the last come from the published vocabulary (`git_state_changed` from
-the base event schema example, the rest from the Git sensor section).
+the base event schema example, the rest from the Git sensor section). The set is owned by
+`GIT_SENSOR_CONTRACT.event_types` and enforced at the adapter; `GitGateway` references it
+rather than keeping its own copy.
 
 **One reading can emit several records.** A dirty tree that is also ahead of upstream emits
 `git_dirty` and `git_ahead` as separate records, so `sensor_event_type` always carries a
@@ -377,7 +393,7 @@ PYTHONPATH=src python -m cpos.demo_v54_git_sensor
 The demo prints a `.git` content fingerprint before and after a full mount, three autonomous
 re-samples, and an `EXEC` attempt, then asserts they match.
 
-Tests: 53 on `main`, 90 on this branch.
+Tests: 53 on `main`, 96 on this branch.
 
 ### Regression check against the ablation harness
 
