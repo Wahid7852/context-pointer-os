@@ -376,8 +376,11 @@ class GitGateway(ExternalGateway):
 
     @staticmethod
     def _state_summary(obs: dict) -> str:
+        """Structural only. `branch` is repository-controlled free text and
+        must never reach this field: it stays solely in `observation.branch`,
+        the one field `untrusted_fields` marks."""
         state = "dirty" if obs["dirty"] else "clean"
-        parts = [f"{obs['branch'] or 'detached HEAD'} {state}"]
+        parts = [state]
         if obs["dirty"]:
             parts.append(f"{obs['dirty_count']} changed path(s)")
         if obs["upstream_tracked"]:

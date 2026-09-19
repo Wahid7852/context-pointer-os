@@ -56,7 +56,7 @@ Every observation is emitted as a `kagioneko.sensor_event.v1` record built by
   "source": "git_sensor",
   "observed_at": "2026-08-29T04:23:29.814094+05:30",
   "subject": "repo:self",
-  "summary": "feat/git-sensor-phase1 dirty, 4 changed path(s), ahead 4, behind 3",
+  "summary": "dirty, 4 changed path(s), ahead 4, behind 3",
   "risk": "medium",
   "confidence": 1.0,
   "source_of_truth": ["ptr://ext.git/self"],
@@ -108,28 +108,47 @@ the World Model spec wants a readable branch in its repo-state facts
 
 ### The contract is closed at every level
 
-Three layers, all static, all enforced in the adapter as well as the builder:
+Four layers, all static, all enforced in the adapter as well as the builder:
 
 **Top level.** `FIELD_TYPES` freezes the complete field set with its required type. Any
 field outside it is refused. `confidence` must be a finite real number, so `"0.5"`, `True`,
 `NaN` and `inf` are all refused; `requires_human_review` must be a bool, not `"false"`;
 list fields must be lists of strings; free-text fields are bounded at 512 characters.
+`event_id` must match the exact shape the builder generates
+(`sensor_evt_[0-9a-f]{16}`) and `observed_at` must be a bounded RFC3339 timestamp, so
+neither can carry an arbitrary or unbounded string just because both are typed `str`.
 
 **Per source.** `SENSOR_CONTRACTS` maps each accepted `source` to a `SensorContract` that
-freezes its `sensor_event_type` vocabulary, its `subject` form
-(`repo:<identifier>` or `repo:<invalid>` for Git), and the exact typed key set of its
-`observation`. A `source` with no contract is refused outright. There is deliberately no
-registration function: adding a producer means adding a contract in code, under review,
+freezes its `sensor_event_type` vocabulary, its `subject` form, and the exact typed key set
+of its `observation`. A `source` with no contract is refused outright. There is deliberately
+no registration function: adding a producer means adding a contract in code, under review,
 and a mutable registry would itself have been a widening vector.
 
+**Event-type semantics.** The contract is event-type-aware, not just shape-aware. Every
+state event type (`git_clean`, `git_dirty`, `git_ahead`, `git_behind`,
+`git_state_changed`) must carry a complete `observation`; only `git_sensor_unavailable`, a
+sensor fault rather than an observation, may omit it. `repo:<invalid>` — "the caller-supplied
+key was unsafe to echo" — is a subject only `git_sensor_unavailable` may use, so a state
+event can never claim it. And what `sensor_event_type` asserts is checked against what
+`observation` actually shows: `git_clean` requires `dirty is False and dirty_count == 0`,
+`git_dirty` requires the opposite, `git_ahead`/`git_behind` each require
+`upstream_tracked is True` and the matching count `> 0`. An alternate producer cannot label
+a dirty tree `git_clean`, or emit a state event with no observation at all, or borrow the
+malformed-key subject for a fabricated reading.
+
 **Provenance.** `untrusted_fields` must equal exactly the set of contract-marked fields
-that are present. A producer can neither omit the marker nor invent one.
+that are present. A producer can neither omit the marker nor invent one. Because the marked
+field (`observation.branch`) is the only place repository-controlled text is allowed to
+live, `summary` and every other top-level field are built to be structural: `_state_summary`
+never interpolates the branch value, so a hostile branch name cannot ride along in a field
+downstream consumers treat as trusted prose.
 
 Together these mean an alternate or hand-built producer cannot widen the envelope at the
 top level, cannot smuggle a payload under a neutral observation key, cannot launder
-repository-controlled text as trusted, and cannot put a host path or credential-bearing
-URL into `source_of_truth`. Each of those has a regression test that asserts
-`registry.audit_log == []` after the refused write.
+repository-controlled text as trusted, cannot claim an event type its own observation
+contradicts, and cannot put a host path or credential-bearing URL into `source_of_truth`.
+Each of those has a regression test that asserts either a raised
+`SensorEventContractError` or `registry.audit_log == []` after the refused write.
 
 Validating in the adapter as well as the builder is the load-bearing half: the adapter is
 the boundary every producer crosses, so a record built by hand or by a future sensor is
