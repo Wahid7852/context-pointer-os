@@ -129,13 +129,14 @@ class SensorContract:
     __slots__ = (
         "source", "event_types", "subject_pattern", "observation",
         "observation_optional_types", "placeholder_subject",
-        "placeholder_subject_types", "invariants",
+        "placeholder_subject_types", "invariants", "observation_invariant",
     )
 
     def __init__(
         self, source, event_types, subject_pattern, observation,
         observation_optional_types=(), placeholder_subject=None,
         placeholder_subject_types=(), invariants=None,
+        observation_invariant=None,
     ):
         self.source = source
         self.event_types = frozenset(event_types)
@@ -154,10 +155,31 @@ class SensorContract:
         # contract enforces what `sensor_event_type` claims, not just its
         # shape (e.g. `git_clean` actually requires a clean reading).
         self.invariants: Dict[str, Callable[[Dict[str, Any]], bool]] = dict(invariants or {})
+        # Type-independent self-consistency of `observation`: fields that
+        # must agree with each other regardless of which event type carries
+        # them (e.g. an untracked count cannot exceed the total dirty count).
+        self.observation_invariant: Optional[Callable[[Dict[str, Any]], bool]] = observation_invariant
 
     @property
     def untrusted_paths(self) -> Tuple[str, ...]:
         return tuple(f"observation.{k}" for k, f in self.observation.items() if f.untrusted)
+
+
+def _git_observation_is_self_consistent(obs: Dict[str, Any]) -> bool:
+    """Fields that must agree regardless of `sensor_event_type`.
+
+    `ahead`/`behind` are only meaningful once an upstream is tracked; an
+    untracked count is a subset of the total dirty count, never larger; and
+    `branch`/`detached` describe the same HEAD, so exactly one holds.
+    """
+    tracked = obs["upstream_tracked"]
+    if (obs["ahead"] is not None) != tracked or (obs["behind"] is not None) != tracked:
+        return False
+    if obs["untracked_count"] > obs["dirty_count"]:
+        return False
+    if (obs["branch"] is None) != obs["detached"]:
+        return False
+    return True
 
 
 GIT_SENSOR_CONTRACT = SensorContract(
@@ -198,6 +220,7 @@ GIT_SENSOR_CONTRACT = SensorContract(
         "git_ahead":  lambda obs: obs["upstream_tracked"] is True and (obs["ahead"] or 0) > 0,
         "git_behind": lambda obs: obs["upstream_tracked"] is True and (obs["behind"] or 0) > 0,
     },
+    observation_invariant=_git_observation_is_self_consistent,
 )
 
 # Static and closed. Adding a sensor means adding a contract here, in code,
@@ -358,6 +381,11 @@ def _validate_observation(contract: SensorContract, event: Dict[str, Any]) -> No
                 )
         if isinstance(value, int) and not isinstance(value, bool) and value < 0:
             raise SensorEventContractError(f"observation.{key} must not be negative")
+
+    if contract.observation_invariant is not None and not contract.observation_invariant(obs):
+        raise SensorEventContractError(
+            f"observation for {contract.source} is internally inconsistent: {obs!r}"
+        )
 
     invariant = contract.invariants.get(event_type)
     if invariant is not None and not invariant(obs):

@@ -704,6 +704,33 @@ def test_sensor_event_type_must_match_what_the_observation_shows():
     )["sensor_event_type"] == "git_ahead"
 
 
+def test_observation_is_internally_consistent_regardless_of_event_type():
+    """Cross-field consistency is checked independent of `sensor_event_type`,
+    not just the type-specific claim: a hostile or buggy producer cannot
+    hide a contradictory reading behind whichever event type skips the
+    per-type invariant that would have caught it."""
+    # ahead/behind only mean something once an upstream is tracked.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=git_observation(
+            upstream_tracked=False, ahead=1, behind=None,
+        ))
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=git_observation(
+            upstream_tracked=True, ahead=None, behind=0,
+        ))
+    # An untracked path is a dirty path; it cannot outnumber the total.
+    with pytest.raises(SensorEventContractError):
+        git_event(sensor_event_type="git_dirty", observation=git_observation(
+            dirty=True, dirty_count=1, untracked_count=2,
+        ))
+    # branch and detached describe the same HEAD: exactly one holds.
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=git_observation(branch="main", detached=True))
+    with pytest.raises(SensorEventContractError):
+        git_event(observation=git_observation(branch=None, detached=False),
+                  untrusted_fields=[])
+
+
 def test_event_id_and_observed_at_are_bounded_and_well_formed():
     ok_event = git_event()
     for field, bad in (

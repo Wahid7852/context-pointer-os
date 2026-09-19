@@ -127,14 +127,18 @@ and a mutable registry would itself have been a widening vector.
 **Event-type semantics.** The contract is event-type-aware, not just shape-aware. Every
 state event type (`git_clean`, `git_dirty`, `git_ahead`, `git_behind`,
 `git_state_changed`) must carry a complete `observation`; only `git_sensor_unavailable`, a
-sensor fault rather than an observation, may omit it. `repo:<invalid>` — "the caller-supplied
-key was unsafe to echo" — is a subject only `git_sensor_unavailable` may use, so a state
-event can never claim it. And what `sensor_event_type` asserts is checked against what
+sensor fault rather than an observation, may omit it. `repo:<invalid>` (the caller-supplied
+key was unsafe to echo) is a subject only `git_sensor_unavailable` may use, so a state
+event can never claim it. What `sensor_event_type` asserts is also checked against what
 `observation` actually shows: `git_clean` requires `dirty is False and dirty_count == 0`,
 `git_dirty` requires the opposite, `git_ahead`/`git_behind` each require
-`upstream_tracked is True` and the matching count `> 0`. An alternate producer cannot label
-a dirty tree `git_clean`, or emit a state event with no observation at all, or borrow the
-malformed-key subject for a fabricated reading.
+`upstream_tracked is True` and the matching count `> 0`. Independent of event type, the
+observation must be internally consistent too: `ahead`/`behind` only appear when
+`upstream_tracked` is true, `untracked_count` cannot exceed `dirty_count`, and `branch` and
+`detached` describe the same HEAD, so exactly one is set. An alternate producer cannot label
+a dirty tree `git_clean`, emit a state event with no observation at all, borrow the
+malformed-key subject for a fabricated reading, or hide a contradictory field combination
+behind whichever event type's own check happens not to cover it.
 
 **Provenance.** `untrusted_fields` must equal exactly the set of contract-marked fields
 that are present. A producer can neither omit the marker nor invent one. Because the marked
